@@ -226,6 +226,11 @@ def test_reset(test_video_file):
         video_manager.release()
 
 
+# TODO(v1.0): Remove support for runtime concatenation, it overly complicates
+# things and is rarely used; videos can easily be concatenated with stream
+# copying using FFMPEG as well.
+#
+# Runtime concatenation can still be achieved by creating a custom VideoManager.
 def test_multiple_videos(test_video_file):
     """ Test VideoManager handling decoding frames across video boundaries. """
 
