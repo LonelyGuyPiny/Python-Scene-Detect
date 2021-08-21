@@ -65,6 +65,14 @@ from scenedetect.video_manager import VideoFramerateUnavailable
 from scenedetect.video_manager import VideoParameterMismatch
 
 
+#@pytest.mark.parametrize("vm_type", [VideoManagerCv2, VideoManagerAv])
+
+#pytestmark = pytest.mark.parametrize("vm_type", [VideoManagerCv2, VideoManagerAv])
+#
+# def some_test(vm_type, test_video_file):
+#    pass
+
+
 def test_video_params(test_video_file):
     """ Test VideoManager get_framerate/get_framesize methods on test_video_file. """
     try:
