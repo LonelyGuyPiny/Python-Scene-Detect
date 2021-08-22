@@ -23,7 +23,6 @@
 # ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-
 """ ``scenedetect.video_stream`` Module
 
 This module contains the :py:class:`VideoStream` class, which provides a consistent
@@ -33,32 +32,104 @@ support multiple video backends.
 """
 
 from abc import ABC, abstractmethod
-from typing import Tuple, Union, Optional
-import os.path
+from typing import Tuple, Optional, Union
 
 from numpy import ndarray
 
 from scenedetect.platform import logger
 from scenedetect.frame_timecode import FrameTimecode
 
+##
+## VideoManager Exceptions
+##
+
+
+class SeekError(Exception):
+    """Either an unrecoverable error happened while attempting to seek, or the underlying
+    stream is not seekable (additional information will be provided when possible)."""
+
+
+class VideoOpenFailure(Exception):
+    """May be raised by a backend if opening a video fails."""
+
+
+##
+## VideoStream Constants & Helper Functions
+##
+
+DEFAULT_DOWNSCALE_FACTORS = {
+    3200: 12,    # ~4k
+    2100: 8,    # ~2k
+    1700: 6,    # ~1080p
+    1200: 5,
+    900: 4,    # ~720p
+    600: 3,
+    400: 2    # ~480p
+}
+"""Dict[int, int]: The default downscale factor for a video of size W x H,
+which enforces the constraint that W >= 200 to ensure an adequate amount
+of pixels for scene detection while providing a speedup in processing. """
+
+
+def compute_downscale_factor(frame_width: int) -> int:
+    """ Compute Downscale Factor: Returns the optimal default downscale factor based on
+    a video's resolution (specifically, the width parameter).
+
+    Returns:
+        int: The defalt downscale factor to use with a video of frame_height x frame_width.
+    """
+    for width in sorted(DEFAULT_DOWNSCALE_FACTORS, reverse=True):
+        if frame_width >= width:
+            return DEFAULT_DOWNSCALE_FACTORS[width]
+    return 1
+
 
 class VideoStream(ABC):
     """ Interface which all video backends must implement. """
-    def __init__(self):
-        self._downscale: Optional[int] = None
 
+    def __init__(self):
+        self._downscale: int = 1
+
+    #
+    # TODO: Move responsibility for downscaling into SceneManager to help simplify
+    # this interface.
+    #
     @property
     def downscale(self) -> int:
-        """Factor to downscale each frame by. If 0, 1, or None, has no effect.
-        If 2, effectively divides the video into 1/4 it's original resolution."""
+        """Factor to downscale each frame by. Will always be >= 1, where 1
+        indicates no scaling."""
         return self._downscale
 
     @downscale.setter
-    def downscale(self, downscale_factor: Optional[int] = None):
-        # TODO: If None, calculate based on frame size.
-        if not isinstance(downscale_factor, int):
+    def downscale(self, downscale_factor: int):
+        """Set to 1 for no downscaling, 2 for 2x downscaling, 3 for 3x, etc..."""
+        if downscale_factor < 1:
+            raise ValueError("Downscale factor must be a positive integer >= 1!")
+        if downscale_factor is not None and not isinstance(downscale_factor, int):
             logger.warning("Downscale factor will be truncated to integer!")
+            downscale_factor = int(downscale_factor)
         self._downscale = downscale_factor
+
+    def downscale_auto(self):
+        """Sets downscale factor automatically based on video frame width."""
+        self.downscale = compute_downscale_factor(self.frame_size[0])
+
+    @property
+    def frame_size_effective(self) -> Tuple[int, int]:
+        """Get effective framesize taking into account downscale if set."""
+        if self.downscale is None:
+            return self.frame_size
+        return (self.frame_size[0] / self.downscale, self.frame_size[1] / self.downscale)
+
+
+    @property
+    def base_timecode(self) -> FrameTimecode:
+        """Returns base FrameTimecode object to use as a timebase."""
+        return FrameTimecode(timecode=0, fps=self.frame_rate)
+
+    #
+    # Abstract Properties
+    #
 
     @property
     @abstractmethod
@@ -66,16 +137,17 @@ class VideoStream(ABC):
         """Returns video or device path."""
         raise NotImplementedError
 
+
     @property
     @abstractmethod
-    def base_timecode(self) -> FrameTimecode:
-        """Returns base FrameTimecode object to use as a timebase."""
+    def is_seekable(self) -> bool:
+        """True if seek() is allowed, False otherwise."""
         raise NotImplementedError
 
     @property
     @abstractmethod
-    def position(self) -> FrameTimecode:
-        """Returns current position within stream as FrameTimecode."""
+    def frame_rate(self) -> float:
+        """Get frame rate in frames/sec."""
         raise NotImplementedError
 
     @property
@@ -87,7 +159,7 @@ class VideoStream(ABC):
     @property
     @abstractmethod
     def frame_size(self) -> Tuple[int, int]:
-        """Size of each video frame in pixels."""
+        """Size of each video frame in pixels as a tuple of (width, height)."""
         raise NotImplementedError
 
     @property
@@ -96,8 +168,19 @@ class VideoStream(ABC):
         """Returns display aspect ratio in form numerator/denominator."""
         raise NotImplementedError
 
+    @property
     @abstractmethod
-    def read(self, decode: bool=True, advance: bool=True) -> Optional[ndarray]:
+    def position(self) -> FrameTimecode:
+        """Returns current position within stream as FrameTimecode."""
+        raise NotImplementedError
+
+
+    #
+    # Abstract Methods
+    #
+
+    @abstractmethod
+    def read(self, decode: bool = True, advance: bool = True) -> Optional[ndarray]:
         """ Returns next frame (or current if advance = False), or None if end of video.
 
         If decode = False, None will be returned, but will be slightly faster.
@@ -111,24 +194,21 @@ class VideoStream(ABC):
         """ Close and re-open the VideoStream (equivalent to seeking back to beginning). """
         raise NotImplementedError
 
+
     @abstractmethod
-    def seek(self, timecode: FrameTimecode):
-        """ Seeks to the given timecode. Will be the next frame returned by read(). """
+    def seek(self, target: Union[FrameTimecode, float, int]):
+        """Seeks to the given timecode. Will be the next frame returned by read().
+
+        May not be supported on all backends/types of videos (e.g. cameras).
+
+        Arguments:
+            target: Target position in video stream to seek to. Interpreted based on type.
+              If FrameTimecode, backend can seek using any representation (preferably native when
+              VFR support is added).
+              If float, interpreted as time in seconds.
+              If int, interpreted as frame number.
+        Raises:
+            SeekError if an unrecoverable error occurs while seeking, or seeking is not
+            supported (either by the backend entirely, or if the input is a stream).
+        """
         raise NotImplementedError
-
-    @property
-    def frame_rate(self) -> float:
-        """Get framerate in frames/sec."""
-        return self.base_timecode.get_framerate()
-
-    @property
-    def frame_size_effective(self) -> Tuple[int, int]:
-        """Get effective framesize taking into account downscale if set."""
-        if self.downscale is None:
-            return self.frame_size
-        return (self.frame_size[0] / self.downscale, self.frame_size[1] / self.downscale)
-
-
-
-
-

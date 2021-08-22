@@ -60,6 +60,7 @@ import cv2
 from scenedetect.platform import logger as default_logger
 from scenedetect.platform import STRING_TYPE
 from scenedetect.frame_timecode import FrameTimecode, MINIMUM_FRAMES_PER_SECOND_FLOAT
+from scenedetect.video_stream import compute_downscale_factor
 
 ##
 ## VideoManager Exceptions
@@ -127,36 +128,8 @@ class InvalidDownscaleFactor(ValueError):
 
 
 ##
-## VideoManager Constants & Helper Functions
+## VideoManager Helper Functions
 ##
-
-DEFAULT_DOWNSCALE_FACTORS = {
-    3200: 12,   # ~4k
-    2100:  8,   # ~2k
-    1700:  6,   # ~1080p
-    1200:  5,
-    900:   4,   # ~720p
-    600:   3,
-    400:   2    # ~480p
-}
-"""Dict[int, int]: The default downscale factor for a video of size W x H,
-which enforces the constraint that W >= 200 to ensure an adequate amount
-of pixels for scene detection while providing a speedup in processing. """
-
-
-
-def compute_downscale_factor(frame_width):
-    # type: (int) -> int
-    """ Compute Downscale Factor: Returns the optimal default downscale factor based on
-    a video's resolution (specifically, the width parameter).
-
-    Returns:
-        int: The defalt downscale factor to use with a video of frame_height x frame_width.
-    """
-    for width in sorted(DEFAULT_DOWNSCALE_FACTORS, reverse=True):
-        if frame_width >= width:
-            return DEFAULT_DOWNSCALE_FACTORS[width]
-    return 1
 
 
 def get_video_name(video_file):
