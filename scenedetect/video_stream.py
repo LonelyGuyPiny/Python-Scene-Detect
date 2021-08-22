@@ -164,8 +164,8 @@ class VideoStream(ABC):
 
     @property
     @abstractmethod
-    def aspect_ratio(self) -> Tuple[float, float]:
-        """Returns display aspect ratio in form numerator/denominator."""
+    def aspect_ratio(self) -> float:
+        """Returns display/pixel aspect ratio as a float (1.0 represents square pixels)."""
         raise NotImplementedError
 
     @property

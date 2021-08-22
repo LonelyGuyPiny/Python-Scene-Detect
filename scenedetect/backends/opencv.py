@@ -37,7 +37,7 @@ import cv2
 from numpy import ndarray
 
 from scenedetect.frame_timecode import FrameTimecode, MINIMUM_FRAMES_PER_SECOND_FLOAT
-from scenedetect.platform import logger
+from scenedetect.platform import get_aspect_ratio, logger
 from scenedetect.video_stream import VideoStream, SeekError, VideoOpenFailure
 
 
@@ -87,6 +87,56 @@ class VideoStreamCv2(VideoStream):
         if self._is_device:
             return None
         return self.base_timecode + math.trunc(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    @property
+    def aspect_ratio(self) -> float:
+        """Returns display/pixel aspect ratio as a float (1.0 represents square pixels)."""
+        return get_aspect_ratio(self._cap)
+
+    @property
+    def position(self) -> FrameTimecode:
+        """Returns current position within stream as FrameTimecode."""
+        # TODO
+        raise NotImplementedError
+
+    def seek(self, target: Union[FrameTimecode, float, int]):
+        """Seeks to the given timecode. Will be the next frame returned by read().
+
+        May not be supported on all backends/types of videos (e.g. cameras).
+
+        Arguments:
+            target: Target position in video stream to seek to. Interpreted based on type.
+              If FrameTimecode, backend can seek using any representation (preferably native when
+              VFR support is added).
+              If float, interpreted as time in seconds.
+              If int, interpreted as frame number.
+        Raises:
+            SeekError if an unrecoverable error occurs while seeking, or seeking is not
+            supported (either by the backend entirely, or if the input is a stream).
+        """
+        # TODO
+        raise NotImplementedError
+
+
+    def reset(self):
+        """ Close and re-open the VideoStream (equivalent to seeking back to beginning). """
+        self._cap, self._frame_rate = self._open_capture(self._frame_rate)
+
+
+    def read(self, decode: bool = True, advance: bool = True) -> Optional[ndarray]:
+        """ Returns next frame (or current if advance = False), or None if end of video.
+
+        If decode = False, None will be returned, but will be slightly faster.
+
+        If decode and advance are both False, equivalent to a no-op.
+        """
+        if advance:
+            self._cap.grab()
+        if decode:
+            _, frame = self._cap.retrieve()
+            return frame
+        return None
+
 
 
     #
