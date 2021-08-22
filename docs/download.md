@@ -3,7 +3,7 @@
 
 PySceneDetect is completely free software, and can be downloaded from the links below.  See the [license and copyright information](copyright.md) page for details.  If you have trouble running PySceneDetect, ensure that you have all the required dependencies listed in the [Dependencies](#dependencies) section below.
 
-PySceneDetect is compatible with both Python 2 and 3.  Note that Python 3 usually provides better performance.
+PySceneDetect requires at least Python 3.6 or higher.
 
 ## Download and Installation
 
@@ -51,7 +51,7 @@ To get familiar with PySceneDetect, try running `scenedetect help`, or continue 
 
 ### Python Packages
 
-PySceneDetect requires [Python 2 or 3](https://www.python.org/) and the following packages:
+PySceneDetect requires [Python 3](https://www.python.org/) and the following packages:
 
  - [OpenCV](http://opencv.org/) (compatible with 2/3), can install via `pip install opencv-python`. Used for video I/O.
  - [Numpy](https://numpy.org/), can install via `pip install numpy`. Used for frame processing.
