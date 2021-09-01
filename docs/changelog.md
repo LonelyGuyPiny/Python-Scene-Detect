@@ -18,7 +18,8 @@ PySceneDetect Releases
 
 
  * [api] New `VideoStream` object replaces `VideoManager` and supports both OpenCV and PyAV backends
- * [api] Video seeking is now 1-based instead of 0-based (TODO: also tackle for `FrameTimecode` objects)
+    * Improves video seeking invariants, especially around defining what frames 0 and 1 mean
+    * FrameTimecode objects still are 0-based (e.g. frame #0 is PTS 0), but the `VideoStream.frame_number` property is 1-based
  * [api] `save_images()` no longer accepts downscale_factor since there is already the ability to downscale images
  * [api] Responsibility for frame downscaling has been moved to `SceneManager`
 
