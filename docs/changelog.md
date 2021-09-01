@@ -2,6 +2,25 @@
 PySceneDetect Releases
 ==========================================================
 
+## PySceneDetect 1.0
+
+### 1.0 (TBD)
+
+#### Release Notes
+
+ * First major API update and internal with significant changes from v0.5.x
+ * Adds support for multiple video backends to improve both performance and accuracy
+ * Frame numbers now start from 1 instead of 0 to match most other tools/libraries (e.g. `ffmpeg`), although `FrameTimecode` is still 0-based (this is corrected transparently)
+
+#### Changelog
+
+ * [general] Frame numbers now start from 1 instead of 0
+
+
+ * [api] New `VideoStream` object replaces `VideoManager` and supports both OpenCV and PyAV backends
+ * [api] Video seeking is now 1-based instead of 0-based, except when using `FrameTimecode` objects
+
+
 ## PySceneDetect 0.5
 
 ### 0.5.6 (August 15, 2021)  &nbsp;<span class="fa fa-tags"></span>

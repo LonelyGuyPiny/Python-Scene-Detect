@@ -124,7 +124,7 @@ class VideoStream(ABC):
 
     @property
     def base_timecode(self) -> FrameTimecode:
-        """Returns base FrameTimecode object to use as a timebase."""
+        """Base FrameTimecode object to use as a time base."""
         return FrameTimecode(timecode=0, fps=self.frame_rate)
 
     #
@@ -134,7 +134,7 @@ class VideoStream(ABC):
     @property
     @abstractmethod
     def path(self) -> str:
-        """Returns video or device path."""
+        """Video or device path."""
         raise NotImplementedError
 
 
@@ -147,13 +147,13 @@ class VideoStream(ABC):
     @property
     @abstractmethod
     def frame_rate(self) -> float:
-        """Get frame rate in frames/sec."""
+        """Frame rate in frames/sec."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def duration(self) -> Optional[FrameTimecode]:
-        """Returns duration of the stream as a FrameTimecode, or None if non terminating."""
+        """Duration of the stream as a FrameTimecode, or None if non terminating."""
         raise NotImplementedError
 
     @property
@@ -165,13 +165,31 @@ class VideoStream(ABC):
     @property
     @abstractmethod
     def aspect_ratio(self) -> float:
-        """Returns display/pixel aspect ratio as a float (1.0 represents square pixels)."""
+        """Display/pixel aspect ratio as a float (1.0 represents square pixels)."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def position(self) -> FrameTimecode:
-        """Returns current position within stream as FrameTimecode."""
+        """Current position within stream as FrameTimecode.
+
+        This can be interpreted as presentation time stamp, thus frame 1 corresponds
+        to the presentation time 0.  Returns 0 even if `frame_number` is 0."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def position_ms(self) -> float:
+        """Current position within stream as a float of the presentation time in
+        milliseconds. The first frame has a PTS of 0."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def frame_number(self) -> int:
+        """Current position within stream as the frame number.
+
+        Will return 0 until the first frame is `read`."""
         raise NotImplementedError
 
 
@@ -197,9 +215,16 @@ class VideoStream(ABC):
 
     @abstractmethod
     def seek(self, target: Union[FrameTimecode, float, int]):
-        """Seeks to the given timecode. Will be the next frame returned by read().
+        """Seeks to the given timecode. The values of all properties/methods are undefined after
+        calling `seek` until `read` is called  with `advance=True` (the default).
+
+        Frame 0 has a (presentation) timecode of 0.
 
         May not be supported on all backends/types of videos (e.g. cameras).
+
+        Internally, PySceneDetect maps the first frame to 0 to simplify timecode handling.
+        Note that most external libraries denote the first frame as 1, so correction for this is
+        sometimes required.
 
         Arguments:
             target: Target position in video stream to seek to. Interpreted based on type.
@@ -208,7 +233,8 @@ class VideoStream(ABC):
               If float, interpreted as time in seconds.
               If int, interpreted as frame number.
         Raises:
-            SeekError if an unrecoverable error occurs while seeking, or seeking is not
-            supported (either by the backend entirely, or if the input is a stream).
+            SeekError: An unrecoverable error occurs while seeking, or seeking is not
+              supported (either by the backend entirely, or if the input is a stream).
+            ValueError: `target` is not a valid value (i.e. it is negative).
         """
         raise NotImplementedError

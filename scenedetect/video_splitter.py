@@ -232,6 +232,7 @@ def split_video_ffmpeg(input_video_paths, scene_list, output_file_template, vide
         'Splitting input video%s using ffmpeg, output path template:\n  %s',
         's' if len(input_video_paths) > 1 else '', output_file_template)
 
+    # TODO: REMOVE THIS BRANCH AND CHANGE TO TAKE A SINGLE FILE ONLY.
     if len(input_video_paths) > 1:
         # TODO: Add support for splitting multiple/appended input videos.
         # https://github.com/Breakthrough/PySceneDetect/issues/71
