@@ -173,6 +173,7 @@ class TestVideoStream:
         stream.reset()
 
         stream.seek(200)
+        # TODO: Fix FrameTimecode so this can just be +200.
         assert stream.position == base_timecode + 199
         assert stream.position_ms == pytest.approx(1000.0 * (199.0 / float(stream.frame_rate)),
                                                    abs=TIME_TOLERANCE_MS)

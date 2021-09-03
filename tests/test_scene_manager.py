@@ -65,8 +65,8 @@ from scenedetect.video_manager import VideoManager
 from scenedetect.detectors import ContentDetector
 
 
-def test_using_pyscenedetect_videomanager(test_video_file):
-    """ Test SceneManager with VideoManager and ContentDetector. """
+def test_detect_scenes(test_video_file):
+    """ Test SceneManager with VideoStream and ContentDetector. """
     vm = VideoManager([test_video_file])
     sm = SceneManager()
     sm.add_detector(ContentDetector())
@@ -77,7 +77,7 @@ def test_using_pyscenedetect_videomanager(test_video_file):
         end_time = FrameTimecode('00:00:05', video_fps)
 
         vm.set_duration(start_time=start_time, end_time=end_time)
-        vm.set_downscale_factor()
+        sm.set_auto_downscale()
 
         vm.start()
         num_frames = sm.detect_scenes(frame_source=vm)
@@ -85,25 +85,6 @@ def test_using_pyscenedetect_videomanager(test_video_file):
 
     finally:
         vm.release()
-
-
-def test_using_opencv_videocapture(test_video_file):
-    """ Test SceneManager with cv2.VideoCapture and ContentDetector. """
-    cap = cv2.VideoCapture(test_video_file)
-    sm = SceneManager()
-    sm.add_detector(ContentDetector())
-
-    try:
-        video_fps = cap.get(cv2.CAP_PROP_FPS)
-        duration = FrameTimecode('00:00:05', video_fps)
-
-        num_frames = sm.detect_scenes(frame_source=cap, end_time=duration)
-
-        assert num_frames == duration.get_frames()
-
-    finally:
-        cap.release()
-
 
 def test_scene_list(test_video_file):
     """ Test SceneManager get_scene_list method with VideoManager/ContentDetector. """
@@ -119,7 +100,7 @@ def test_scene_list(test_video_file):
         assert end_time.get_frames() > start_time.get_frames()
 
         vm.set_duration(start_time=start_time, end_time=end_time)
-        vm.set_downscale_factor()
+        sm.set_auto_downscale()
 
         vm.start()
         num_frames = sm.detect_scenes(frame_source=vm)
@@ -157,7 +138,7 @@ def test_save_images(test_video_file):
         end_time = FrameTimecode('00:00:15', video_fps)
 
         vm.set_duration(start_time=start_time, end_time=end_time)
-        vm.set_downscale_factor()
+        sm.set_auto_downscale()
 
         vm.start()
         sm.detect_scenes(frame_source=vm)
@@ -219,7 +200,7 @@ def test_detect_scenes_callback(test_video_file):
         start_time = FrameTimecode('00:00:05', video_fps)
         end_time = FrameTimecode('00:00:15', video_fps)
         vm.set_duration(start_time=start_time, end_time=end_time)
-        vm.set_downscale_factor()
+        sm.set_auto_downscale()
         vm.start()
         num_frames = sm.detect_scenes(frame_source=vm, callback=fake_callback.get_callback())
         assert fake_callback.num_invoked() == (len(sm.get_scene_list()) - 1)

@@ -57,7 +57,6 @@ from scenedetect.video_manager import VideoManager
 from scenedetect.video_manager import VideoOpenFailure
 from scenedetect.video_manager import VideoFramerateUnavailable
 from scenedetect.video_manager import VideoParameterMismatch
-from scenedetect.video_manager import InvalidDownscaleFactor
 
 from scenedetect.video_splitter import is_mkvmerge_available
 from scenedetect.video_splitter import is_ffmpeg_available
@@ -479,7 +478,7 @@ class CliContext(object):
         self.options_processed = options_processed_orig
 
 
-    def _init_video_manager(self, input_list, framerate, downscale):
+    def _init_video_manager(self, input_list, framerate):
 
         self.base_timecode = None
 
@@ -490,7 +489,6 @@ class CliContext(object):
                 video_files=input_list, framerate=framerate, logger=self.logger)
             video_manager_initialized = True
             self.base_timecode = self.video_manager.get_base_timecode()
-            self.video_manager.set_downscale_factor(downscale)
         except VideoOpenFailure as ex:
             error_strs = [
                 'could not open video%s.' % get_plural(ex.file_list),
@@ -529,10 +527,6 @@ class CliContext(object):
                 ' resolution. -f / --framerate may be specified to override the framerate.')
             self.logger.debug('\n'.join(error_strs))
             raise click.BadParameter('\n'.join(error_strs), param_hint='input videos')
-        except InvalidDownscaleFactor as ex:
-            error_strs = ['Downscale value is not > 0.', str(ex)]
-            self.logger.debug('\n'.join(error_strs))
-            raise click.BadParameter('\n'.join(error_strs), param_hint='downscale factor')
         return video_manager_initialized
 
 
@@ -557,7 +551,7 @@ class CliContext(object):
         self.frame_skip = frame_skip
 
         video_manager_initialized = self._init_video_manager(
-            input_list=input_list, framerate=framerate, downscale=downscale)
+            input_list=input_list, framerate=framerate)
 
         # Ensure VideoManager is initialized, and open StatsManager if --stats is specified.
         if not video_manager_initialized:
@@ -571,7 +565,16 @@ class CliContext(object):
                 self._open_stats_file()
 
         # Init SceneManager.
+        self.logger.debug('Initializing SceneManager.')
         self.scene_manager = SceneManager(self.stats_manager)
+        if downscale is None:
+            self.scene_manager.set_auto_downscale()
+        else:
+            try:
+                self.scene_manager.downscale = downscale
+            except ValueError as ex:
+                self.logger.debug(str(ex))
+                raise click.BadParameter(str(ex), param_hint='downscale factor')
 
         self.drop_short_scenes = drop_short_scenes
         self.min_scene_len = parse_timecode(self, min_scene_len)

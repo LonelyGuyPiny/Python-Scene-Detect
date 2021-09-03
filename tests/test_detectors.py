@@ -73,7 +73,7 @@ def test_content_detector(test_movie_clip):
             end_time = FrameTimecode('00:01:19', video_fps)
 
             vm.set_duration(start_time=start_time, end_time=end_time)
-            vm.set_downscale_factor()
+            sm.set_auto_downscale()
 
             vm.start()
             sm.detect_scenes(frame_source=vm)
@@ -105,7 +105,7 @@ def test_adaptive_detector(test_movie_clip):
         end_time = FrameTimecode('00:01:19', video_fps)
 
         vm.set_duration(start_time=start_time, end_time=end_time)
-        vm.set_downscale_factor()
+        sm.set_auto_downscale()
 
         vm.start()
         sm.detect_scenes(frame_source=vm)
@@ -131,7 +131,7 @@ def test_threshold_detector(test_video_file):
     sm.add_detector(ThresholdDetector())
 
     try:
-        vm.set_downscale_factor()
+        sm.set_auto_downscale()
 
         vm.start()
         sm.detect_scenes(frame_source=vm)
@@ -159,7 +159,7 @@ def test_detectors_with_stats(test_video_file):
             end_time = FrameTimecode('00:00:15', vm.get_framerate())
 
             vm.set_duration(end_time=end_time)
-            vm.set_downscale_factor()
+            sm.set_auto_downscale()
 
             vm.start()
             sm.detect_scenes(frame_source=vm)
@@ -172,7 +172,7 @@ def test_detectors_with_stats(test_video_file):
             vm.release()
             vm.reset()
             vm.set_duration(end_time=end_time)
-            vm.set_downscale_factor()
+            sm.set_auto_downscale()
             vm.start()
 
             sm.detect_scenes(frame_source=vm)

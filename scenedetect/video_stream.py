@@ -50,7 +50,7 @@ class SeekError(Exception):
 
 
 class VideoOpenFailure(Exception):
-    """May be raised by a backend if opening a video fails."""
+    """Raised by a backend if opening a video fails."""
 
 
 ##
@@ -121,7 +121,6 @@ class VideoStream(ABC):
             return self.frame_size
         return (self.frame_size[0] / self.downscale, self.frame_size[1] / self.downscale)
 
-
     @property
     def base_timecode(self) -> FrameTimecode:
         """Base FrameTimecode object to use as a time base."""
@@ -136,7 +135,6 @@ class VideoStream(ABC):
     def path(self) -> str:
         """Video or device path."""
         raise NotImplementedError
-
 
     @property
     @abstractmethod
@@ -192,7 +190,6 @@ class VideoStream(ABC):
         Will return 0 until the first frame is `read`."""
         raise NotImplementedError
 
-
     #
     # Abstract Methods
     #
@@ -211,7 +208,6 @@ class VideoStream(ABC):
     def reset(self):
         """ Close and re-open the VideoStream (equivalent to seeking back to beginning). """
         raise NotImplementedError
-
 
     @abstractmethod
     def seek(self, target: Union[FrameTimecode, float, int]):

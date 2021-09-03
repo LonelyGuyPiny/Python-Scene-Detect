@@ -90,7 +90,7 @@ the `threshold` argument to modify the sensitivity of the
             ContentDetector(threshold=threshold))
 
         # Improve processing speed by downscaling before processing.
-        video_manager.set_downscale_factor()
+        scene_manager.set_auto_downscale()
 
         # Start the video manager and perform the scene detection.
         video_manager.start()

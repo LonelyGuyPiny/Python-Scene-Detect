@@ -61,6 +61,14 @@ class VideoStreamCv2(VideoStream):
 
         self._open_capture(override_framerate)
 
+    @property
+    def capture(self) -> cv2.VideoCapture:
+        """Returns reference to underlying VideoCapture object.
+
+        Do not seek nor call the read/grab methods through the VideoCapture otherwise the
+        VideoStreamCv2 object will be in an inconsistent state."""
+        return self._cap
+
     #
     # VideoStream Methods/Properties
     #

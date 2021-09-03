@@ -284,11 +284,11 @@ def test_many_videos_downscale_detect_scenes(test_video_file):
     NUM_VIDEOS = 3
     # Open VideoManager with NUM_VIDEOS test videos
     video_manager = VideoManager([test_video_file] * NUM_VIDEOS)
-    video_manager.set_downscale_factor()
 
     try:
         video_manager.start()
         scene_manager = SceneManager()
+        scene_manager.set_auto_downscale()
         scene_manager.detect_scenes(frame_source=video_manager)
     finally:
         # Will release the VideoManagers in vm_list as well.

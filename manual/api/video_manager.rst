@@ -40,13 +40,11 @@ resolution.
         base_timecode = video_manager.get_base_timecode()
 
 
-Next, we set the duration to 2 minutes and the downscale factor to the default
-based on video resolution:
+Next, we set the duration to 2 minute:
 
 .. code:: python
 
     video_manager.set_duration(duration=base_timecode + '00:02:00')
-    video_manager.set_downscale_factor()
 
 :py:meth:`set_duration() <VideoManager.set_duration>` takes up to two arguments of
 ``start_time``, ``end_time``, and ``duration``, where ``end_time`` and ``duration``
@@ -60,15 +58,7 @@ you must pass set the same ``start_time`` argument to the
 method.
 
 After calling the above, the number of frames returned by the :py:class:`VideoManager`
-will be limited to 2 minutes of video exactly, and setting the default downscale factor
-ensures an adequate frame size for performing scene detection in most use cases.
-
-.. warning::
-
-    The :py:meth:`~VideoManager.set_duration` and :py:meth:`~VideoManager.set_downscale_factor`
-    methods must be called **before** :py:meth:`~VideoManager.start`.
-
-Now that all of our options have been set, we can call :py:meth:`VideoManager.start`
+will be limited to 2 minutes of video exactly.  Now we can call :py:meth:`VideoManager.start`
 and begin processing frames the same way we would with an OpenCV VideoCapture object:
 
 .. code:: python
@@ -97,11 +87,12 @@ to cleanup all resources acquired by the :py:class:`VideoManager` object.
 
         video_manager = VideoManager(['video.mp4'])
         try:
-            video_manager.set_downscale_factor()
             video_manager.start()
             while True:
-                if not video_manager.grab():
+                ret, im = video_manager.read()
+                if not ret:
                     break
+            # Do stuff with frame (`im`).
         finally:
             # Ensures release() is called even if an exception
             # is thrown during any code added to process frames.
@@ -144,8 +135,6 @@ The following functions and constants are available in the ``scenedetect.video_m
 
 Exceptions
 ===============================================================
-
-.. autoexception:: scenedetect.video_manager.InvalidDownscaleFactor
 
 .. autoexception:: scenedetect.video_manager.VideoOpenFailure
 

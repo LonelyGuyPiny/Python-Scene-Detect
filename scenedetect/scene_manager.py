@@ -23,7 +23,6 @@
 # ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-
 """ ``scenedetect.scene_manager`` Module
 
 This module implements the :py:class:`SceneManager` object, which is used to coordinate
@@ -49,9 +48,11 @@ threshold values (or other algorithm options) are used.
 
 # Standard Library Imports
 from __future__ import print_function
+from functools import lru_cache
 from string import Template
-import math
+from typing import List, Tuple, Optional, Dict, Callable
 import logging
+import math
 
 # Third-Party Library Imports
 import cv2
@@ -61,6 +62,7 @@ from scenedetect.platform import get_and_create_path
 from scenedetect.platform import get_aspect_ratio
 
 # PySceneDetect Library Imports
+from scenedetect.video_manager import VideoManager
 from scenedetect.frame_timecode import FrameTimecode
 from scenedetect.platform import get_csv_writer
 from scenedetect.platform import get_cv2_imwrite_params
@@ -71,13 +73,58 @@ from scenedetect.scene_detector import SparseSceneDetector
 from scenedetect.thirdparty.simpletable import SimpleTableCell, SimpleTableImage
 from scenedetect.thirdparty.simpletable import SimpleTableRow, SimpleTable, HTMLPage
 
-
 logger = logging.getLogger('pyscenedetect')
-
 
 ##
 ## SceneManager Helper Functions
 ##
+
+DEFAULT_DOWNSCALE_FACTORS = {
+    3200: 12,    # ~4k
+    2100: 8,    # ~2k
+    1700: 6,    # ~1080p
+    1200: 5,
+    900: 4,    # ~720p
+    600: 3,
+    400: 2    # ~480p
+}
+"""Dict[int, int]: The default downscale factor for a video of size W x H,
+which enforces the constraint that W >= 200 to ensure an adequate amount
+of pixels for scene detection while providing a speedup in processing. """
+
+
+@lru_cache(maxsize=None)
+def compute_downscale_factor(frame_width: int) -> int:
+    """ Compute Downscale Factor: Returns the optimal default downscale factor based on
+    a video's resolution (specifically, the width parameter).
+
+    Returns:
+        int: The defalt downscale factor to use with a video of frame_height x frame_width.
+    """
+    for width in sorted(DEFAULT_DOWNSCALE_FACTORS, reverse=True):
+        if frame_width >= width:
+            return DEFAULT_DOWNSCALE_FACTORS[width]
+    return 1
+
+
+def downscale_frame(frame: np.ndarray, downscale_factor: int = -1) -> np.ndarray:
+    """Downscales a given `frame` by dropping every `downscale_factor` pixels.
+
+    Arguments:
+        frame: Frame to downscale.
+        downscale_factor: Number of pixels to drop along each dimension (must be >= 1).
+
+    Returns:
+        Downscaled frame as an array slice.
+
+    Raises:
+        ValueError if downscale_factor is out of range.
+    """
+
+    if downscale_factor < 1:
+        raise ValueError("Downscale factor must be an integer >= 1!")
+    return frame[::downscale_factor, ::downscale_factor, :]
+
 
 def get_scenes_from_cuts(cut_list, base_timecode, num_frames, start_frame=0):
     # type: List[FrameTimecode], FrameTimecode, Union[int, FrameTimecode],
@@ -142,21 +189,33 @@ def write_scene_list(output_csv_file, scene_list, include_cut_list=True, cut_lis
             ["Timecode List:"] +
             cut_list if cut_list else [start.get_timecode() for start, _ in scene_list[1:]])
     csv_writer.writerow([
-        "Scene Number",
-        "Start Frame", "Start Timecode", "Start Time (seconds)",
-        "End Frame", "End Timecode", "End Time (seconds)",
-        "Length (frames)", "Length (timecode)", "Length (seconds)"])
+        "Scene Number", "Start Frame", "Start Timecode", "Start Time (seconds)", "End Frame",
+        "End Timecode", "End Time (seconds)", "Length (frames)", "Length (timecode)",
+        "Length (seconds)"
+    ])
     for i, (start, end) in enumerate(scene_list):
         duration = end - start
         csv_writer.writerow([
-            '%d' % (i+1),
-            '%d' % start.get_frames(), start.get_timecode(), '%.3f' % start.get_seconds(),
-            '%d' % end.get_frames(), end.get_timecode(), '%.3f' % end.get_seconds(),
-            '%d' % duration.get_frames(), duration.get_timecode(), '%.3f' % duration.get_seconds()])
+            '%d' % (i + 1),
+            '%d' % start.get_frames(),
+            start.get_timecode(),
+            '%.3f' % start.get_seconds(),
+            '%d' % end.get_frames(),
+            end.get_timecode(),
+            '%.3f' % end.get_seconds(),
+            '%d' % duration.get_frames(),
+            duration.get_timecode(),
+            '%.3f' % duration.get_seconds()
+        ])
 
 
-def write_scene_list_html(output_html_filename, scene_list, cut_list=None, css=None,
-                          css_class='mytable', image_filenames=None, image_width=None,
+def write_scene_list_html(output_html_filename,
+                          scene_list,
+                          cut_list=None,
+                          css=None,
+                          css_class='mytable',
+                          image_filenames=None,
+                          image_width=None,
                           image_height=None):
     """Writes the given list of scenes to an output file handle in html format.
 
@@ -213,28 +272,38 @@ def write_scene_list_html(output_html_filename, scene_list, cut_list=None, css=N
         """
 
     # Output Timecode list
-    timecode_table = SimpleTable([["Timecode List:"] +
-                                  (cut_list if cut_list else
-                                   [start.get_timecode() for start, _ in scene_list[1:]])],
-                                 css_class=css_class)
+    timecode_table = SimpleTable(
+        [["Timecode List:"] +
+         (cut_list if cut_list else [start.get_timecode() for start, _ in scene_list[1:]])],
+        css_class=css_class)
 
     # Output list of scenes
-    header_row = ["Scene Number", "Start Frame", "Start Timecode", "Start Time (seconds)",
-                  "End Frame", "End Timecode", "End Time (seconds)",
-                  "Length (frames)", "Length (timecode)", "Length (seconds)"]
+    header_row = [
+        "Scene Number", "Start Frame", "Start Timecode", "Start Time (seconds)", "End Frame",
+        "End Timecode", "End Time (seconds)", "Length (frames)", "Length (timecode)",
+        "Length (seconds)"
+    ]
     for i, (start, end) in enumerate(scene_list):
         duration = end - start
 
         row = SimpleTableRow([
-            '%d' % (i+1),
-            '%d' % start.get_frames(), start.get_timecode(), '%.3f' % start.get_seconds(),
-            '%d' % end.get_frames(), end.get_timecode(), '%.3f' % end.get_seconds(),
-            '%d' % duration.get_frames(), duration.get_timecode(), '%.3f' % duration.get_seconds()])
+            '%d' % (i + 1),
+            '%d' % start.get_frames(),
+            start.get_timecode(),
+            '%.3f' % start.get_seconds(),
+            '%d' % end.get_frames(),
+            end.get_timecode(),
+            '%.3f' % end.get_seconds(),
+            '%d' % duration.get_frames(),
+            duration.get_timecode(),
+            '%.3f' % duration.get_seconds()
+        ])
 
         if image_filenames:
             for image in image_filenames[i]:
-                row.add_cell(SimpleTableCell(SimpleTableImage(
-                    image, width=image_width, height=image_height)))
+                row.add_cell(
+                    SimpleTableCell(
+                        SimpleTableImage(image, width=image_width, height=image_height)))
 
         if i == 0:
             scene_table = SimpleTable(rows=[row], header_row=header_row, css_class=css_class)
@@ -249,16 +318,18 @@ def write_scene_list_html(output_html_filename, scene_list, cut_list=None, css=N
     page.save(output_html_filename)
 
 
-def save_images(scene_list, video_manager, num_images=3, frame_margin=1,
-                image_extension='jpg', encoder_param=95,
-                image_name_template='$VIDEO_NAME-Scene-$SCENE_NUMBER-$IMAGE_NUMBER',
-                output_dir=None, downscale_factor=1, show_progress=False,
-                scale=None, height=None, width=None):
-    # type: (List[Tuple[FrameTimecode, FrameTimecode]], VideoManager,
-    #        Optional[int], Optional[int], Optional[str], Optional[int],
-    #        Optional[str], Optional[str], Optional[int], Optional[bool],
-    #        Optional[float], Optional[int], Optional[int])
-    #       -> Dict[List[str]]
+def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
+                video_manager: VideoManager,
+                num_images: int = 3,
+                frame_margin: int = 1,
+                image_extension: str = 'jpg',
+                encoder_param: int = 95,
+                image_name_template: str = '$VIDEO_NAME-Scene-$SCENE_NUMBER-$IMAGE_NUMBER',
+                output_dir: Optional[str] = None,
+                show_progress: Optional[bool] = False,
+                scale: Optional[float] = None,
+                height: Optional[int] = None,
+                width: Optional[int] = None) -> Dict[int, List[str]]:
     """ Saves a set number of images from each scene, given a list of scenes
     and the associated video/frame source.
 
@@ -281,8 +352,6 @@ def save_images(scene_list, video_manager, num_images=3, frame_margin=1,
             extension is applied automatically as per the argument image_extension.
         output_dir: Directory to output the images into.  If not set, the output
             is created in the working directory.
-        downscale_factor: Integer factor to downscale images by.  No filtering
-            is currently done, only downsampling (thus requiring an integer).
         show_progress: If True, shows a progress bar if tqdm is installed.
         scale: Optional factor by which to rescale saved images.A scaling factor of 1 would
             not result in rescaling. A value <1 results in a smaller saved image, while a
@@ -299,9 +368,9 @@ def save_images(scene_list, video_manager, num_images=3, frame_margin=1,
 
 
     Returns:
-        Dict[List[str]]: Dictionary of the format { scene_num : [image_paths] },
-        where scene_num is the number of the scene in scene_list (starting from 1),
-        and image_paths is a list of the paths to the newly saved/created images.
+        Dictionary of the format { scene_num : [image_paths] }, where scene_num is the
+        number of the scene in scene_list (starting from 1), and image_paths is a list of
+        the paths to the newly saved/created images.
 
     Raises:
         ValueError: Raised if any arguments are invalid or out of range (e.g.
@@ -315,15 +384,14 @@ def save_images(scene_list, video_manager, num_images=3, frame_margin=1,
 
     # TODO: Validate that encoder_param is within the proper range.
     # Should be between 0 and 100 (inclusive) for jpg/webp, and 1-9 for png.
-    imwrite_param = [get_cv2_imwrite_params()[image_extension],
-                     encoder_param] if encoder_param is not None else []
+    imwrite_param = [get_cv2_imwrite_params()[image_extension], encoder_param
+                    ] if encoder_param is not None else []
 
     video_name = video_manager.get_video_name()
 
-    # Reset video manager and downscale factor.
+    # Reset video manager.
     video_manager.release()
     video_manager.reset()
-    video_manager.set_downscale_factor(downscale_factor)
     video_manager.start()
 
     # Setup flags and init progress bar if available.
@@ -331,10 +399,7 @@ def save_images(scene_list, video_manager, num_images=3, frame_margin=1,
     logger.info('Generating output images (%d per scene)...', num_images)
     progress_bar = None
     if show_progress and tqdm:
-        progress_bar = tqdm(
-            total=len(scene_list) * num_images,
-            unit='images',
-            dynamic_ncols=True)
+        progress_bar = tqdm(total=len(scene_list) * num_images, unit='images', dynamic_ncols=True)
 
     filename_template = Template(image_name_template)
 
@@ -348,30 +413,26 @@ def save_images(scene_list, video_manager, num_images=3, frame_margin=1,
     timecode_list = [
         [
             FrameTimecode(int(f), fps=framerate) for f in [
-                # middle frames
-                a[len(a)//2] if (0 < j < num_images-1) or num_images == 1
+    # middle frames
+                a[len(a) // 2] if (0 < j < num_images - 1) or num_images == 1
 
-                # first frame
+    # first frame
                 else min(a[0] + frame_margin, a[-1]) if j == 0
 
-                # last frame
+    # last frame
                 else max(a[-1] - frame_margin, a[0])
 
-                # for each evenly-split array of frames in the scene list
+    # for each evenly-split array of frames in the scene list
                 for j, a in enumerate(np.array_split(r, num_images))
             ]
-        ]
-        for i, r in enumerate([
-            # pad ranges to number of images
-            r
-            if 1+r[-1]-r[0] >= num_images
-            else list(r) + [r[-1]] * (num_images - len(r))
-            # create range of frames in scene
+        ] for i, r in enumerate([
+    # pad ranges to number of images
+            r if 1 + r[-1] - r[0] >= num_images else list(r) + [r[-1]] * (num_images - len(r))
+    # create range of frames in scene
             for r in (
                 range(start.get_frames(), end.get_frames())
-                # for each scene in scene list
-                for start, end in scene_list
-                )
+    # for each scene in scene list
+                for start, end in scene_list)
         ])
     ]
 
@@ -385,18 +446,15 @@ def save_images(scene_list, video_manager, num_images=3, frame_margin=1,
             video_manager.seek(image_timecode)
             ret_val, frame_im = video_manager.read()
             if ret_val:
-                file_path = '%s.%s' % (
-                    filename_template.safe_substitute(
-                        VIDEO_NAME=video_name,
-                        SCENE_NUMBER=scene_num_format % (i + 1),
-                        IMAGE_NUMBER=image_num_format % (j + 1),
-                        FRAME_NUMBER=image_timecode.get_frames()),
-                    image_extension)
+                file_path = '%s.%s' % (filename_template.safe_substitute(
+                    VIDEO_NAME=video_name,
+                    SCENE_NUMBER=scene_num_format % (i + 1),
+                    IMAGE_NUMBER=image_num_format % (j + 1),
+                    FRAME_NUMBER=image_timecode.get_frames()), image_extension)
                 image_filenames[i].append(file_path)
                 if aspect_ratio is not None:
                     frame_im = cv2.resize(
-                        frame_im, (0, 0), fx=aspect_ratio, fy=1.0,
-                        interpolation=cv2.INTER_CUBIC)
+                        frame_im, (0, 0), fx=aspect_ratio, fy=1.0, interpolation=cv2.INTER_CUBIC)
 
                 # Get frame dimensions prior to resizing or scaling
                 frame_height = frame_im.shape[0]
@@ -404,26 +462,20 @@ def save_images(scene_list, video_manager, num_images=3, frame_margin=1,
 
                 # Figure out what kind of resizing needs to be done
                 if height and width:
-                    frame_im = cv2.resize(
-                        frame_im, (width, height), interpolation=cv2.INTER_CUBIC)
+                    frame_im = cv2.resize(frame_im, (width, height), interpolation=cv2.INTER_CUBIC)
                 elif height and not width:
                     factor = height / float(frame_height)
                     width = int(factor * frame_width)
-                    frame_im = cv2.resize(
-                        frame_im, (width, height), interpolation=cv2.INTER_CUBIC)
+                    frame_im = cv2.resize(frame_im, (width, height), interpolation=cv2.INTER_CUBIC)
                 elif width and not height:
                     factor = width / float(frame_width)
                     height = int(factor * frame_height)
-                    frame_im = cv2.resize(
-                        frame_im, (width, height), interpolation=cv2.INTER_CUBIC)
+                    frame_im = cv2.resize(frame_im, (width, height), interpolation=cv2.INTER_CUBIC)
                 elif scale:
                     frame_im = cv2.resize(
-                        frame_im, (0, 0), fx=scale, fy=scale,
-                        interpolation=cv2.INTER_CUBIC)
+                        frame_im, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
 
-                cv2.imwrite(
-                    get_and_create_path(file_path, output_dir),
-                    frame_im, imwrite_param)
+                cv2.imwrite(get_and_create_path(file_path, output_dir), frame_im, imwrite_param)
             else:
                 completed = False
                 break
@@ -440,6 +492,7 @@ def save_images(scene_list, video_manager, num_images=3, frame_margin=1,
 ## SceneManager Class Implementation
 ##
 
+
 class SceneManager(object):
     """ The SceneManager facilitates detection of scenes via the :py:meth:`detect_scenes` method,
     given a video source (:py:class:`VideoManager <scenedetect.video_manager.VideoManager>`
@@ -451,8 +504,7 @@ class SceneManager(object):
     the optimal threshold values or other options for various detection algorithms.
     """
 
-    def __init__(self, stats_manager=None):
-        # type: (Optional[StatsManager])
+    def __init__(self, stats_manager: Optional[StatsManager] = None):
         self._cutting_list = []
         self._event_list = []
         self._detector_list = []
@@ -461,7 +513,30 @@ class SceneManager(object):
         self._num_frames = 0
         self._start_frame = 0
         self._base_timecode = None
+        self._downscale = 1
+        self._auto_downscale = False
 
+    @property
+    def downscale(self) -> int:
+        """Factor to downscale each frame by. Will always be >= 1, where 1
+        indicates no scaling."""
+        return self._downscale
+
+    @downscale.setter
+    def downscale(self, downscale_factor: int):
+        """Set to 1 for no downscaling, 2 for 2x downscaling, 3 for 3x, etc..."""
+        # TODO: Disallow calling this if we started processing frames!
+        # Ensure clear() is called first.
+        if downscale_factor < 1:
+            raise ValueError("Downscale factor must be a positive integer >= 1!")
+        if downscale_factor is not None and not isinstance(downscale_factor, int):
+            logger.warning("Downscale factor will be truncated to integer!")
+            downscale_factor = int(downscale_factor)
+        self._downscale = downscale_factor
+
+    def set_auto_downscale(self, value=True):
+        """If set to True, will automatically downscale based on video frame size."""
+        self._auto_downscale = value
 
     def add_detector(self, detector):
         # type: (SceneDetector) -> None
@@ -493,12 +568,10 @@ class SceneManager(object):
         else:
             self._sparse_detector_list.append(detector)
 
-
     def get_num_detectors(self):
         # type: () -> int
         """ Gets number of registered scene detectors added via add_detector. """
         return len(self._detector_list)
-
 
     def clear(self):
         # type: () -> None
@@ -516,13 +589,11 @@ class SceneManager(object):
         self._num_frames = 0
         self._start_frame = 0
 
-
     def clear_detectors(self):
         # type: () -> None
         """ Removes all scene detectors added to the SceneManager via add_detector(). """
         self._detector_list.clear()
         self._sparse_detector_list.clear()
-
 
     def get_scene_list(self, base_timecode=None):
         # type: (FrameTimecode) -> List[Tuple[FrameTimecode, FrameTimecode]]
@@ -541,10 +612,10 @@ class SceneManager(object):
             base_timecode = self._base_timecode
         if base_timecode is None:
             return []
-        return sorted(self.get_event_list(base_timecode) + get_scenes_from_cuts(
-            self.get_cut_list(base_timecode), base_timecode,
-            self._num_frames, self._start_frame))
-
+        return sorted(
+            self.get_event_list(base_timecode) + get_scenes_from_cuts(
+                self.get_cut_list(base_timecode), base_timecode, self._num_frames,
+                self._start_frame))
 
     def get_cut_list(self, base_timecode=None):
         # type: (FrameTimecode) -> List[FrameTimecode]
@@ -567,16 +638,13 @@ class SceneManager(object):
             base_timecode = self._base_timecode
         if base_timecode is None:
             return []
-        return [FrameTimecode(cut, base_timecode)
-                for cut in self._get_cutting_list()]
-
+        return [FrameTimecode(cut, base_timecode) for cut in self._get_cutting_list()]
 
     def _get_cutting_list(self):
         # type: () -> list
         """ Returns a sorted list of unique frame numbers of any detected scene cuts. """
         # We remove duplicates here by creating a set then back to a list and sort it.
         return sorted(list(set(self._cutting_list)))
-
 
     def get_event_list(self, base_timecode=None):
         # type: (FrameTimecode) -> List[FrameTimecode]
@@ -593,12 +661,12 @@ class SceneManager(object):
             base_timecode = self._base_timecode
         if base_timecode is None:
             return []
-        return [(base_timecode + start, base_timecode + end)
-                for start, end in self._event_list]
+        return [(base_timecode + start, base_timecode + end) for start, end in self._event_list]
 
-
-    def _process_frame(self, frame_num, frame_im, callback=None):
-        # type(int, numpy.ndarray) -> None
+    def _process_frame(self,
+                       frame_num: int,
+                       frame_im: Optional[np.ndarray],
+                       callback: Callable[[Optional[np.ndarray]], None] = None):
         """ Adds any cuts detected with the current frame to the cutting list. """
         for detector in self._detector_list:
             cuts = detector.process_frame(frame_num, frame_im)
@@ -611,7 +679,6 @@ class SceneManager(object):
                 callback(frame_im, frame_num)
             self._event_list += events
 
-
     def _is_processing_required(self, frame_num):
         # type(int) -> bool
         """ Is Processing Required: Returns True if frame metrics not in StatsManager,
@@ -619,15 +686,18 @@ class SceneManager(object):
         """
         return all([detector.is_processing_required(frame_num) for detector in self._detector_list])
 
-
     def _post_process(self, frame_num):
         # type(int, numpy.ndarray) -> None
         """ Adds any remaining cuts to the cutting list after processing the last frame. """
         for detector in self._detector_list:
             self._cutting_list += detector.post_process(frame_num)
 
-    def detect_scenes(self, frame_source, end_time=None, frame_skip=0,
-                      show_progress=True, callback=None):
+    def detect_scenes(self,
+                      frame_source,
+                      end_time=None,
+                      frame_skip=0,
+                      show_progress=True,
+                      callback=None):
         # type: (VideoManager, Union[int, FrameTimecode],
         #        Optional[Union[int, FrameTimecode]], Optional[bool],
         #        Optional[Callable[numpy.ndarray]) -> int
@@ -637,10 +707,7 @@ class SceneManager(object):
         be obtained by calling either the get_scene_list() or get_cut_list() methods.
 
         Arguments:
-            frame_source (scenedetect.video_manager.VideoManager or cv2.VideoCapture):
-                A source of frames to process (using frame_source.read() as in VideoCapture).
-                VideoManager is preferred as it allows concatenation of multiple videos
-                as well as seeking, by defining start time and end time/duration.
+            frame_source: A VideoStream object pointing.
             end_time (int or FrameTimecode): Maximum number of frames to detect
                 (set to None to detect all available frames). Only needed for OpenCV
                 VideoCapture objects; for VideoManager objects, use set_duration() instead.
@@ -663,14 +730,21 @@ class SceneManager(object):
                 was constructed with a StatsManager object.
         """
 
+        # Temporarily keeping downscaling in VideoManager until transition to VideoStream
+        # for performance reasons.
+        use_old_downscale = True
+        if self._auto_downscale:
+            frame_source.set_downscale_factor()
+        else:
+            frame_source.set_downscale_factor(self._downscale)
+
         if frame_skip > 0 and self._stats_manager is not None:
             raise ValueError('frame_skip must be 0 when using a StatsManager.')
 
         start_frame = 0
         curr_frame = 0
         end_frame = None
-        self._base_timecode = FrameTimecode(
-            timecode=0, fps=frame_source.get(cv2.CAP_PROP_FPS))
+        self._base_timecode = FrameTimecode(timecode=0, fps=frame_source.get(cv2.CAP_PROP_FPS))
 
         total_frames = math.trunc(frame_source.get(cv2.CAP_PROP_FRAME_COUNT))
 
@@ -699,10 +773,7 @@ class SceneManager(object):
 
         progress_bar = None
         if tqdm and show_progress:
-            progress_bar = tqdm(
-                total=total_frames,
-                unit='frames',
-                dynamic_ncols=True)
+            progress_bar = tqdm(total=total_frames, unit='frames', dynamic_ncols=True)
         try:
 
             while True:
@@ -720,6 +791,14 @@ class SceneManager(object):
 
                 if not ret_val:
                     break
+                # Temporarily keeping downscaling in VideoManager until transition to VideoStream
+                # for performance reasons.
+                if not use_old_downscale:
+                    downscale = compute_downscale_factor(
+                        frame_im.shape[1]) if self._auto_downscale else self._downscale
+                    if downscale > 1:
+                        frame_im = downscale_frame(frame_im, self._downscale)
+
                 self._process_frame(self._num_frames + start_frame, frame_im, callback)
 
                 curr_frame += 1

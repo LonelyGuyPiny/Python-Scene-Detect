@@ -76,7 +76,7 @@ printing a list of scenes, and both saving/loading a stats file.
                     stats_manager.load_from_csv(stats_file)
 
             # Set downscale factor to improve processing speed.
-            video_manager.set_downscale_factor()
+            scene_manager.set_auto_downscale()
 
             # Start video_manager.
             video_manager.start()
