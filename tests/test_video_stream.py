@@ -34,14 +34,13 @@ all supported backends, and verify that they are functionally equivalent where p
 # pylint: disable=no-self-use, protected-access, multiple-statements, invalid-name
 # pylint: disable=redefined-outer-name
 
-import math
 from typing import Type
 import os.path
 # Third-Party Library Imports
 import numpy
 import pytest
 
-from scenedetect.video_stream import VideoStream, VideoOpenFailure
+from scenedetect.video_stream import VideoStream
 from scenedetect.backends.opencv import VideoStreamCv2
 
 ##
@@ -127,17 +126,32 @@ class TestVideoStream:
         assert stream.duration.get_frames() == test_video.total_frames
 
     def test_read(self, vs_type: Type[VideoStream], test_video: VideoParameters):
+        """Validate basic `read` functionality."""
         stream = vs_type(test_video.path)
-        frame = stream.read().copy()
+        frame = stream.read()
         # For now hard-code 3 channels/pixel for each test video
         assert frame.shape == (test_video.height, test_video.width, 3)
         assert stream.frame_number == 1
-        frame_copy = stream.read(decode=True, advance=False)
+
+    def test_read_no_advance(self, vs_type: Type[VideoStream], test_video: VideoParameters):
+        """Validate invoking `read` with `advance` set to False."""
+        stream = vs_type(test_video.path)
+        frame = stream.read().copy()
+        assert stream.frame_number == 1
+        frame_copy = stream.read(advance=False)
+        assert stream.frame_number == 1
         assert calculate_frame_delta(frame, frame_copy) == pytest.approx(0.0)
 
+    def test_read_no_decode(self, vs_type: Type[VideoStream], test_video: VideoParameters):
+        """Validate invoking `read` with `decode` set to False."""
+        stream = vs_type(test_video.path)
+        assert stream.read(decode=False) is None
+        assert stream.frame_number == 1
+        assert stream.read(decode=False, advance=False) is None
+        assert stream.frame_number == 1
 
     def test_seek(self, vs_type: Type[VideoStream], test_video: VideoParameters):
-        """ Test VideoManager seek method. """
+        """Validate seeking behaviour."""
         stream = vs_type(test_video.path)
         base_timecode = stream.base_timecode
         assert stream.position == base_timecode
@@ -178,9 +192,6 @@ class TestVideoStream:
         assert stream.position_ms == pytest.approx(1000.0 * (199.0 / float(stream.frame_rate)),
                                                    abs=TIME_TOLERANCE_MS)
         assert stream.frame_number == 200
-        print(stream.position_ms)
-        print(stream.position)
-
         stream.read()
         assert stream.frame_number == 201
         assert stream.position == base_timecode + 200
@@ -188,19 +199,18 @@ class TestVideoStream:
                                                    abs=TIME_TOLERANCE_MS)
 
 
-
-
 #
-# Tests which only iterate over VideoStream types:
+# Tests which only use a single video file
 #
-
 
 def test_invalid_path(vs_type: Type[VideoStream]):
+    """Ensure correct exception is thrown if the path does not exist."""
     with pytest.raises(IOError):
         _ = vs_type('this_path_should_not_exist.mp4')
 
 
 def test_seek_invalid(vs_type: Type[VideoStream], test_video_file: str):
+    """Test `seek()` throws correct exception when specifying in invalid seek value."""
     stream = vs_type(test_video_file)
 
     with pytest.raises(ValueError):
@@ -215,11 +225,14 @@ def test_seek_invalid(vs_type: Type[VideoStream], test_video_file: str):
 
 
 def test_reset(vs_type: Type[VideoStream], test_video_file: str):
+    """Test `reset()` functions as expected."""
     stream = vs_type(test_video_file)
 
-    assert stream.read() is not None
-    assert stream.frame_number > 0
-    stream.reset()
-    assert stream.frame_number == 0
+    for _ in range(3):
+        assert stream.read() is not None
+        assert stream.frame_number > 0
+        stream.reset()
+        assert stream.frame_number == 0
+        assert stream.read() is not None
 
 

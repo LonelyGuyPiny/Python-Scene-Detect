@@ -41,11 +41,28 @@ from scenedetect.platform import get_aspect_ratio, logger
 from scenedetect.video_stream import VideoStream, SeekError, VideoOpenFailure
 
 
+def open_video(path: Optional[str], device: Optional[int], framerate: Optional[float]):
+    if path is not None and device is not None:
+        raise ValueError("Only one of path or device can be specified!")
+    if path is not None:
+        return VideoStreamCv2(path_or_device=path, framerate=framerate)
+    return VideoStreamCv2(path_or_device=device, framerate=framerate)
+
+
 class VideoStreamCv2(VideoStream):
     """ OpenCV VideoCapture backend. """
 
-    def __init__(self, path_or_device: Union[str, int], override_framerate: Optional[float] = None):
-        """Open a new OpenCV backend."""
+    def __init__(self, path_or_device: Union[str, int], framerate: Optional[float] = None):
+        """Open a new OpenCV backend.
+
+        Arguments:
+            path_or_device: Path to video, or device ID as integer.
+
+            TODO: Split VideoStreamCv2 up into a child class VideoStreamCv2Device which overrides
+            methods in VideoStreamCv2 rather than having to branch. Can then consider renaming this
+            to VideoStreamCv2File, and also have one for image sequence if required (since that has
+            implications for the seek method as well).
+            """
         super().__init__()
 
         self._path_or_device = path_or_device
@@ -59,7 +76,7 @@ class VideoStreamCv2(VideoStream):
         self._has_seeked = False
         self._has_grabbed = False
 
-        self._open_capture(override_framerate)
+        self._open_capture(framerate)
 
     @property
     def capture(self) -> cv2.VideoCapture:

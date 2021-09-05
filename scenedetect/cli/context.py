@@ -568,7 +568,7 @@ class CliContext(object):
         self.logger.debug('Initializing SceneManager.')
         self.scene_manager = SceneManager(self.stats_manager)
         if downscale is None:
-            self.scene_manager.set_auto_downscale()
+            self.scene_manager.auto_downscale = True
         else:
             try:
                 self.scene_manager.downscale = downscale

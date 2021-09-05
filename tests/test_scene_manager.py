@@ -77,7 +77,7 @@ def test_detect_scenes(test_video_file):
         end_time = FrameTimecode('00:00:05', video_fps)
 
         vm.set_duration(start_time=start_time, end_time=end_time)
-        sm.set_auto_downscale()
+        sm.auto_downscale = True
 
         vm.start()
         num_frames = sm.detect_scenes(frame_source=vm)
@@ -100,7 +100,7 @@ def test_scene_list(test_video_file):
         assert end_time.get_frames() > start_time.get_frames()
 
         vm.set_duration(start_time=start_time, end_time=end_time)
-        sm.set_auto_downscale()
+        sm.auto_downscale = True
 
         vm.start()
         num_frames = sm.detect_scenes(frame_source=vm)
@@ -138,7 +138,7 @@ def test_save_images(test_video_file):
         end_time = FrameTimecode('00:00:15', video_fps)
 
         vm.set_duration(start_time=start_time, end_time=end_time)
-        sm.set_auto_downscale()
+        sm.auto_downscale = True
 
         vm.start()
         sm.detect_scenes(frame_source=vm)
@@ -200,7 +200,7 @@ def test_detect_scenes_callback(test_video_file):
         start_time = FrameTimecode('00:00:05', video_fps)
         end_time = FrameTimecode('00:00:15', video_fps)
         vm.set_duration(start_time=start_time, end_time=end_time)
-        sm.set_auto_downscale()
+        sm.auto_downscale = True
         vm.start()
         num_frames = sm.detect_scenes(frame_source=vm, callback=fake_callback.get_callback())
         assert fake_callback.num_invoked() == (len(sm.get_scene_list()) - 1)

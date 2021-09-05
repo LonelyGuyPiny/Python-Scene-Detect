@@ -9,3 +9,4 @@ manual/_build/
 *.jpg
 *.jpeg
 *.patch
+.eggs/*

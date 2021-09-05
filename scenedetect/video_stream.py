@@ -89,37 +89,6 @@ class VideoStream(ABC):
     def __init__(self):
         self._downscale: int = 1
 
-    #
-    # TODO: Move responsibility for downscaling into SceneManager to help simplify
-    # this interface.
-    #
-    @property
-    def downscale(self) -> int:
-        """Factor to downscale each frame by. Will always be >= 1, where 1
-        indicates no scaling."""
-        return self._downscale
-
-    @downscale.setter
-    def downscale(self, downscale_factor: int):
-        """Set to 1 for no downscaling, 2 for 2x downscaling, 3 for 3x, etc..."""
-        if downscale_factor < 1:
-            raise ValueError("Downscale factor must be a positive integer >= 1!")
-        if downscale_factor is not None and not isinstance(downscale_factor, int):
-            logger.warning("Downscale factor will be truncated to integer!")
-            downscale_factor = int(downscale_factor)
-        self._downscale = downscale_factor
-
-    def downscale_auto(self):
-        """Sets downscale factor automatically based on video frame width."""
-        self.downscale = compute_downscale_factor(self.frame_size[0])
-
-    @property
-    def frame_size_effective(self) -> Tuple[int, int]:
-        """Get effective framesize taking into account downscale if set."""
-        if self.downscale is None:
-            return self.frame_size
-        return (self.frame_size[0] / self.downscale, self.frame_size[1] / self.downscale)
-
     @property
     def base_timecode(self) -> FrameTimecode:
         """Base FrameTimecode object to use as a time base."""
@@ -195,9 +164,10 @@ class VideoStream(ABC):
 
     @abstractmethod
     def read(self, decode: bool = True, advance: bool = True) -> Optional[ndarray]:
-        """ Returns next frame (or current if advance = False), or None if end of video.
+        """ If `advance` is True (default), returns the next frame in the stream,
+        otherwise the current frame.
 
-        If decode = False, None will be returned, but will be slightly faster.
+        If `decode` = False, no frame will be decoded/returned which is slightly faster.
 
         If decode and advance are both False, equivalent to a no-op.
         """

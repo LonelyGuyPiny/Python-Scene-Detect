@@ -1,13 +1,7 @@
-
-from enum import Enum
-
-
-class BackendType(Enum):
-    OPENCV = 1
-    PYAV = 2
-
-DEFAULT_BACKEND = BackendType.OPENCV
-
-def open_video(path, backend=DEFAULT_BACKEND, allow_fallback=True):
-    pass
-
+#
+# TODO: Consider removing and making this a namespace package?
+#
+#
+# Future VideoStream implementation ideas:
+#  - Nvidia VPF: https://developer.nvidia.com/blog/vpf-hardware-accelerated-video-processing-framework-in-python/
+#

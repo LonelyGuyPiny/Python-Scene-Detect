@@ -81,7 +81,7 @@ def test_api(test_video_file):
         video_manager.set_duration(start_time=start_time, end_time=end_time)
 
         # Set downscale factor to improve processing speed.
-        scene_manager.set_auto_downscale()
+        scene_manager.auto_downscale = True
 
         # Start video_manager.
         video_manager.start()

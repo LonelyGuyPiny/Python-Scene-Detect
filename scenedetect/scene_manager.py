@@ -48,9 +48,8 @@ threshold values (or other algorithm options) are used.
 
 # Standard Library Imports
 from __future__ import print_function
-from functools import lru_cache
 from string import Template
-from typing import List, Tuple, Optional, Dict, Callable
+from typing import List, Tuple, Optional, Dict, Callable, Union
 import logging
 import math
 
@@ -68,7 +67,7 @@ from scenedetect.platform import get_csv_writer
 from scenedetect.platform import get_cv2_imwrite_params
 from scenedetect.stats_manager import StatsManager
 from scenedetect.stats_manager import FrameMetricRegistered
-from scenedetect.scene_detector import SparseSceneDetector
+from scenedetect.scene_detector import SceneDetector, SparseSceneDetector
 
 from scenedetect.thirdparty.simpletable import SimpleTableCell, SimpleTableImage
 from scenedetect.thirdparty.simpletable import SimpleTableRow, SimpleTable, HTMLPage
@@ -79,51 +78,30 @@ logger = logging.getLogger('pyscenedetect')
 ## SceneManager Helper Functions
 ##
 
-DEFAULT_DOWNSCALE_FACTORS = {
-    3200: 12,    # ~4k
-    2100: 8,    # ~2k
-    1700: 6,    # ~1080p
-    1200: 5,
-    900: 4,    # ~720p
-    600: 3,
-    400: 2    # ~480p
-}
-"""Dict[int, int]: The default downscale factor for a video of size W x H,
-which enforces the constraint that W >= 200 to ensure an adequate amount
-of pixels for scene detection while providing a speedup in processing. """
+# TODO: This value can and should be tuned for performance improvements as much as possible,
+# until accuracy falls, on a large enough dataset. This has yet to be done, but the current
+# value doesn't seem to have caused any issues at least.
+DEFAULT_MIN_WIDTH: int = 260
+"""The default minimum width a frame will be downscaled to when calculating a downscale factor."""
 
+def compute_downscale_factor(frame_width: int, effective_width: int = DEFAULT_MIN_WIDTH) -> int:
+    """Get the optimal default downscale factor based on a video's resolution (currently only
+    the width in pixels is considered).
 
-@lru_cache(maxsize=None)
-def compute_downscale_factor(frame_width: int) -> int:
-    """ Compute Downscale Factor: Returns the optimal default downscale factor based on
-    a video's resolution (specifically, the width parameter).
-
-    Returns:
-        int: The defalt downscale factor to use with a video of frame_height x frame_width.
-    """
-    for width in sorted(DEFAULT_DOWNSCALE_FACTORS, reverse=True):
-        if frame_width >= width:
-            return DEFAULT_DOWNSCALE_FACTORS[width]
-    return 1
-
-
-def downscale_frame(frame: np.ndarray, downscale_factor: int = -1) -> np.ndarray:
-    """Downscales a given `frame` by dropping every `downscale_factor` pixels.
+    The resulting effective width of the video will be between frame_width and 1.5 * frame_width
+    pixels (e.g. if frame_width is 200, the range of effective widths will be between 200 and 300).
 
     Arguments:
-        frame: Frame to downscale.
-        downscale_factor: Number of pixels to drop along each dimension (must be >= 1).
+        frame_width: Actual width of the video frame in pixels.
+        effective_width: Desired minimum width in pixels.
 
     Returns:
-        Downscaled frame as an array slice.
-
-    Raises:
-        ValueError if downscale_factor is out of range.
+        int: The defalt downscale factor to use to achieve at least the target effective_width.
     """
-
-    if downscale_factor < 1:
-        raise ValueError("Downscale factor must be an integer >= 1!")
-    return frame[::downscale_factor, ::downscale_factor, :]
+    assert not (frame_width < 1 or effective_width < 1)
+    if frame_width < effective_width:
+        return 1
+    return frame_width // effective_width
 
 
 def get_scenes_from_cuts(cut_list, base_timecode, num_frames, start_frame=0):
@@ -505,37 +483,44 @@ class SceneManager(object):
     """
 
     def __init__(self, stats_manager: Optional[StatsManager] = None):
-        self._cutting_list = []
-        self._event_list = []
-        self._detector_list = []
-        self._sparse_detector_list = []
-        self._stats_manager = stats_manager
-        self._num_frames = 0
-        self._start_frame = 0
-        self._base_timecode = None
-        self._downscale = 1
-        self._auto_downscale = False
+        self._cutting_list: List[FrameTimecode] = []
+        self._event_list: List[Tuple[FrameTimecode]] = []
+        self._detector_list: List[SceneDetector] = []
+        self._sparse_detector_list: List[SparseSceneDetector] = []
+        self._stats_manager: Optional[StatsManager] = stats_manager
+        self._num_frames: int = 0
+        self._start_frame: int = 0
+        self._base_timecode: Optional[FrameTimecode] = None
+        self._downscale: int = 1
+        self._auto_downscale: bool = False
 
     @property
     def downscale(self) -> int:
         """Factor to downscale each frame by. Will always be >= 1, where 1
-        indicates no scaling."""
+        indicates no scaling. Will be ignored if auto_downscale=True."""
         return self._downscale
 
     @downscale.setter
-    def downscale(self, downscale_factor: int):
+    def downscale(self, value: int):
         """Set to 1 for no downscaling, 2 for 2x downscaling, 3 for 3x, etc..."""
         # TODO: Disallow calling this if we started processing frames!
         # Ensure clear() is called first.
-        if downscale_factor < 1:
+        if value < 1:
             raise ValueError("Downscale factor must be a positive integer >= 1!")
-        if downscale_factor is not None and not isinstance(downscale_factor, int):
+        if value is not None and not isinstance(value, int):
             logger.warning("Downscale factor will be truncated to integer!")
-            downscale_factor = int(downscale_factor)
-        self._downscale = downscale_factor
+            value = int(value)
+        self._downscale = value
 
-    def set_auto_downscale(self, value=True):
-        """If set to True, will automatically downscale based on video frame size."""
+    @property
+    def auto_downscale(self):
+        """If set to True, will automatically downscale based on video frame size.
+
+        Overrides `downscale` if set."""
+        return self._auto_downscale
+
+    @auto_downscale.setter
+    def auto_downscale(self, value: bool):
         self._auto_downscale = value
 
     def add_detector(self, detector):
@@ -692,12 +677,21 @@ class SceneManager(object):
         for detector in self._detector_list:
             self._cutting_list += detector.post_process(frame_num)
 
+    def _downscale_frame(self, frame: np.ndarray) -> np.ndarray:
+        """Downscales frame if required (i.e. factor > 1), otherwise retursn original frame."""
+        downscale_factor = 1
+        if self.auto_downscale:
+            downscale_factor = compute_downscale_factor(frame_width=frame.shape[1])
+        else:
+            downscale_factor = self.downscale
+        return frame if downscale_factor == 1 else frame[::downscale_factor, ::downscale_factor, :]
+
     def detect_scenes(self,
-                      frame_source,
-                      end_time=None,
-                      frame_skip=0,
-                      show_progress=True,
-                      callback=None):
+                      frame_source: VideoManager,
+                      end_time: Union[int, FrameTimecode]=None,
+                      frame_skip: int=0,
+                      show_progress: bool=True,
+                      callback: Callable[[np.ndarray, int], None] = None):
         # type: (VideoManager, Union[int, FrameTimecode],
         #        Optional[Union[int, FrameTimecode]], Optional[bool],
         #        Optional[Callable[numpy.ndarray]) -> int
@@ -733,7 +727,7 @@ class SceneManager(object):
         # Temporarily keeping downscaling in VideoManager until transition to VideoStream
         # for performance reasons.
         use_old_downscale = True
-        if self._auto_downscale:
+        if self.auto_downscale:
             frame_source.set_downscale_factor()
         else:
             frame_source.set_downscale_factor(self._downscale)
@@ -791,13 +785,11 @@ class SceneManager(object):
 
                 if not ret_val:
                     break
-                # Temporarily keeping downscaling in VideoManager until transition to VideoStream
-                # for performance reasons.
+
+                # Will be switched on when VideoManager is deprecated.
                 if not use_old_downscale:
-                    downscale = compute_downscale_factor(
-                        frame_im.shape[1]) if self._auto_downscale else self._downscale
-                    if downscale > 1:
-                        frame_im = downscale_frame(frame_im, self._downscale)
+                    # Downscale frame if required.
+                    frame_im = self._downscale_frame(frame_im)
 
                 self._process_frame(self._num_frames + start_frame, frame_im, callback)
 

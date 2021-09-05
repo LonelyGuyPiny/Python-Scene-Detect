@@ -62,19 +62,19 @@ import sys
 import cv2
 
 
-# pylint: disable=unused-import
-# pylint: disable=no-member
 
 ##
 ## tqdm Library (scenedetect.platform.tqdm will be tqdm object or None)
 ##
 
+# pylint: disable=unused-import
+# pylint: disable=invalid-name
 try:
     from tqdm import tqdm
-except ImportError:
+except ModuleNotFoundError:
     tqdm = None
-
 # pylint: enable=unused-import
+# pylint: enable=invalid-name
 
 
 ##
@@ -94,6 +94,7 @@ else:
 # Compatibility fix for OpenCV v2.x (copies CAP_PROP_* properties from the
 # cv2.cv namespace to the cv2 namespace, as the cv2.cv namespace was removed
 # with the release of OpenCV 3.0).
+# pylint: disable=no-member
 if not 'CAP_PROP_FPS' in dir(cv2):
     cv2.CAP_PROP_FRAME_WIDTH = cv2.cv.CV_CAP_PROP_FRAME_WIDTH
     cv2.CAP_PROP_FRAME_HEIGHT = cv2.cv.CV_CAP_PROP_FRAME_HEIGHT
@@ -103,7 +104,7 @@ if not 'CAP_PROP_FPS' in dir(cv2):
     cv2.CAP_PROP_FRAME_COUNT = cv2.cv.CV_CAP_PROP_FRAME_COUNT
     cv2.CAP_PROP_FOURCC = cv2.cv.CV_CAP_PROP_FOURCC
     cv2.INTER_CUBIC = cv2.cv.INTER_CUBIC
-
+# pylint: enable=no-member
 
 def get_aspect_ratio(cap, epsilon=0.01):
     # type: (cv2.VideoCapture, float) -> float
