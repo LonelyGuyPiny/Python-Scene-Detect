@@ -57,31 +57,30 @@ class VideoOpenFailure(Exception):
 ## VideoStream Constants & Helper Functions
 ##
 
-DEFAULT_DOWNSCALE_FACTORS = {
-    3200: 12,    # ~4k
-    2100: 8,    # ~2k
-    1700: 6,    # ~1080p
-    1200: 5,
-    900: 4,    # ~720p
-    600: 3,
-    400: 2    # ~480p
-}
-"""Dict[int, int]: The default downscale factor for a video of size W x H,
-which enforces the constraint that W >= 200 to ensure an adequate amount
-of pixels for scene detection while providing a speedup in processing. """
+# TODO: This value can and should be tuned for performance improvements as much as possible,
+# until accuracy falls, on a large enough dataset. This has yet to be done, but the current
+# value doesn't seem to have caused any issues at least.
+DEFAULT_MIN_WIDTH: int = 260
+"""The default minimum width a frame will be downscaled to when calculating a downscale factor."""
 
+def compute_downscale_factor(frame_width: int, effective_width: int = DEFAULT_MIN_WIDTH) -> int:
+    """Get the optimal default downscale factor based on a video's resolution (currently only
+    the width in pixels is considered).
 
-def compute_downscale_factor(frame_width: int) -> int:
-    """ Compute Downscale Factor: Returns the optimal default downscale factor based on
-    a video's resolution (specifically, the width parameter).
+    The resulting effective width of the video will be between frame_width and 1.5 * frame_width
+    pixels (e.g. if frame_width is 200, the range of effective widths will be between 200 and 300).
+
+    Arguments:
+        frame_width: Actual width of the video frame in pixels.
+        effective_width: Desired minimum width in pixels.
 
     Returns:
-        int: The defalt downscale factor to use with a video of frame_height x frame_width.
+        int: The defalt downscale factor to use to achieve at least the target effective_width.
     """
-    for width in sorted(DEFAULT_DOWNSCALE_FACTORS, reverse=True):
-        if frame_width >= width:
-            return DEFAULT_DOWNSCALE_FACTORS[width]
-    return 1
+    assert not (frame_width < 1 or effective_width < 1)
+    if frame_width < effective_width:
+        return 1
+    return frame_width // effective_width
 
 
 class VideoStream(ABC):
