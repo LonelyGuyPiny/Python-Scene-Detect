@@ -163,13 +163,14 @@ class VideoStream(ABC):
     #
 
     @abstractmethod
-    def read(self, decode: bool = True, advance: bool = True) -> Optional[ndarray]:
-        """ If `advance` is True (default), returns the next frame in the stream,
-        otherwise the current frame.
+    def read(self, decode: bool = True, advance: bool = True) -> Union[Optional[ndarray], bool]:
+        """ Return next frame (or current if advance = False), or None if end of video.
 
-        If `decode` = False, no frame will be decoded/returned which is slightly faster.
+        If decode = False, None will be returned, but will be slightly faster.  Instead a
+        boolean indicating if the next frame was advanced or not is returned.
 
-        If decode and advance are both False, equivalent to a no-op.
+        If decode and advance are both False, equivalent to a no-op, and the return value should
+        be discarded/ignored.
         """
         raise NotImplementedError
 
@@ -180,8 +181,8 @@ class VideoStream(ABC):
 
     @abstractmethod
     def seek(self, target: Union[FrameTimecode, float, int]):
-        """Seeks to the given timecode. The values of all properties/methods are undefined after
-        calling `seek` until `read` is called  with `advance=True` (the default).
+        """Seek to the given timecode. The given frame will be the next one returned by `read`
+        with advance=True (the default).
 
         Frame 0 has a (presentation) timecode of 0.
 

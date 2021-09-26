@@ -43,17 +43,21 @@ import pytest
 from scenedetect.video_stream import VideoStream
 from scenedetect.backends.opencv import VideoStreamCv2
 
-##
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 ## List of Required/TBD Test Cases
-##
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
 # TODO: Add checks that frame was decoded properly - compare against
 # a set of hand-picked frames? Or just a few colour samples?
 
 # TODO: Add test using image sequence.
 
-# TODO: Corrupt a video file
-#def test_corrupt_video(vs_type: Type[VideoStream], corrupt_vid_path):
+# TODO: Create a test case which opens both a corrupted video (set random bytes in the header
+# to zeroes until one fails with all backends?).  Can create dynamically by just opening
+# the path to a good video, copying it to a temp location, and modifying it in place.
+
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
+
 
 # Accuracy a framerate is checked to for testing purposes.
 FRAMERATE_TOLERANCE = 0.001
@@ -145,35 +149,49 @@ class TestVideoStream:
     def test_read_no_decode(self, vs_type: Type[VideoStream], test_video: VideoParameters):
         """Validate invoking `read` with `decode` set to False."""
         stream = vs_type(test_video.path)
-        assert stream.read(decode=False) is None
+        assert stream.read(decode=False) is True
         assert stream.frame_number == 1
-        assert stream.read(decode=False, advance=False) is None
+        stream.read(decode=False, advance=False)
         assert stream.frame_number == 1
 
     def test_seek(self, vs_type: Type[VideoStream], test_video: VideoParameters):
         """Validate seeking behaviour."""
+        #
+        # Basic seeking "identities".
+        #
         stream = vs_type(test_video.path)
         base_timecode = stream.base_timecode
         assert stream.position == base_timecode
         assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
         assert stream.frame_number == 0
 
-        # New "identity" timecodes in PySceneDetect v1.0.
-        stream.seek(0.0)
+        stream.read()
+
+        assert stream.position == base_timecode
+        assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
         assert stream.frame_number == 1
+
+        stream.read()
+
+        assert stream.position == base_timecode + 1
+        assert stream.position_ms == pytest.approx(1000.0 / float(stream.frame_rate),
+                                                   abs=TIME_TOLERANCE_MS)
+        assert stream.frame_number == 2
+
+        #
+        # Test seeking with other input types.
+        #
+        stream.seek(0.0)
+        assert stream.frame_number == 0
         # FrameTimecode is currently one "behind" the frame_number since it
         # starts counting from zero. This should eventually be changed.
         assert stream.position == base_timecode
         assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
 
         stream.seek(stream.base_timecode)
-        assert stream.frame_number == 1
+        assert stream.frame_number == 0
         assert stream.position == base_timecode
         assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
-
-        with pytest.raises(ValueError):
-            # Minimum seek number in *frames* is now 1! See above.
-            stream.seek(0)
 
         # Ensure accuracy over the first hundred frames.
         stream.reset()
@@ -187,7 +205,6 @@ class TestVideoStream:
         stream.reset()
 
         stream.seek(200)
-        # TODO: Fix FrameTimecode so this can just be +200.
         assert stream.position == base_timecode + 199
         assert stream.position_ms == pytest.approx(1000.0 * (199.0 / float(stream.frame_rate)),
                                                    abs=TIME_TOLERANCE_MS)
@@ -197,7 +214,6 @@ class TestVideoStream:
         assert stream.position == base_timecode + 200
         assert stream.position_ms == pytest.approx(1000.0 * (200.0 / float(stream.frame_rate)),
                                                    abs=TIME_TOLERANCE_MS)
-
 
 #
 # Tests which only use a single video file
@@ -214,9 +230,6 @@ def test_seek_invalid(vs_type: Type[VideoStream], test_video_file: str):
     stream = vs_type(test_video_file)
 
     with pytest.raises(ValueError):
-        stream.seek(0)
-
-    with pytest.raises(ValueError):
         stream.seek(-1)
 
     with pytest.raises(ValueError):
@@ -229,10 +242,10 @@ def test_reset(vs_type: Type[VideoStream], test_video_file: str):
     stream = vs_type(test_video_file)
 
     for _ in range(3):
-        assert stream.read() is not None
-        assert stream.frame_number > 0
-        stream.reset()
-        assert stream.frame_number == 0
-        assert stream.read() is not None
-
+        stream.read()
+    assert stream.frame_number > 0
+    stream.reset()
+    assert stream.frame_number == 0
+    assert stream.position == 0
+    assert stream.position_ms == pytest.approx(0, abs=TIME_TOLERANCE_MS)
 

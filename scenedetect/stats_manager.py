@@ -221,6 +221,9 @@ class StatsManager(object):
             base_timecode: The base_timecode obtained from the frame source VideoManager.
                 If using an OpenCV VideoCapture, create one using the video framerate by
                 setting base_timecode=FrameTimecode(0, fps=video_framerate).
+
+                TODO(v1.0): Remove this.
+
             force_save: If True, forcably writes metrics out even if there are no
                 registered metrics or frame statistics. If False, a NoMetricsRegistered
                 will be thrown if there are no registered metrics, and a NoMetricsSet

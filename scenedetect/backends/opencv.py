@@ -131,8 +131,8 @@ class VideoStreamCv2(VideoStream):
     def position(self) -> FrameTimecode:
         """Current position within stream as FrameTimecode.
 
-        This can be interpreted as presentation time stamp, thus if `frame_number` is 1,
-        the timestamp is equivalent to presentation time 0.
+        This can be interpreted as presentation time stamp of the last frame which was
+        decoded by calling `read` with advance=True.
 
         This method will always return 0 (e.g. be equal to `base_timecode`) if no frames
         have been `read`."""
@@ -145,27 +145,22 @@ class VideoStreamCv2(VideoStream):
         """Current position within stream as a float of the presentation time in milliseconds.
         The first frame has a time of 0.0 ms.
 
-        Cannot be used after calling `seek` until calling `read` with `advance=True`.
-        Use `position` or `frame_number` instead.
-
         This method will always return 0.0 if no frames have been `read`."""
-        if self._has_seeked:
-            raise RuntimeError(
-                "Cannot access `position_ms` in a VideoStreamCv2 after calling `seek` until"
-                " calling `read` with `advance=True`.")
         return self._cap.get(cv2.CAP_PROP_POS_MSEC)
 
     @property
     def frame_number(self) -> int:
         """Current position within stream in frames as an int.
 
-        1 indicates the first frame, whereas 0 indicates that no frames have been `read`.
+        1 indicates the first frame was just decoded by the last call to `read` with advance=True,
+        whereas 0 indicates that no frames have been `read`.
 
         This method will always return 0 if no frames have been `read`."""
         return math.trunc(self._cap.get(cv2.CAP_PROP_POS_FRAMES))
 
     def seek(self, target: Union[FrameTimecode, float, int]):
-        """Seek to the given timecode. Retrieve frame with `read(advance=False)`.
+        """Seek to the given timecode. The given frame will be the next one returned by `read`
+        with advance=True (the default).
 
         Seeking past the end of video shall be equivalent to seeking to the last frame.
 
@@ -176,63 +171,57 @@ class VideoStreamCv2(VideoStream):
               If FrameTimecode, backend can seek using any representation (preferably native when
               VFR support is added).
               If float, interpreted as time in seconds.
-              If int, interpreted as frame number, starting from 1.
+              If int, interpreted as frame number, starting from 0.
         Raises:
             SeekError if an unrecoverable error occurs while seeking, or seeking is not
             supported (either by the backend entirely, or if the input is a stream).
         """
         if self._is_device:
             raise SeekError("Cannot seek if input is a device!")
-        if isinstance(target, int) and not target > 0:
-            raise ValueError("Target frame number must start from 1!")
-        if isinstance(target, float) and target < 0.0:
-            raise ValueError("Target time in seconds must be positive!")
+        if target < 0:
+            raise ValueError("Target seek position cannot be negative!")
 
-        # Handle case of int 0 separately due to OpenCV/ffmpeg time handling.
-        # Specifically, in a VideoCapture object, seeking to frame 1 yields a pts of 0ms,
-        # but seeking to 0ms yields frame 0 instead of frame 1).
-        if isinstance(target, int) and target == 0:
-            self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0.0)
-            # Seeking to position 0 will not decode any frames.
-            self._has_grabbed = False
-            return
-        # At this point we can just use a FrameTimecode to convert the target into frames.
-        # However, since FrameTimecode 0 maps to frame 1 for a VideoStream, we must handle
-        # that transformation here.
-        if isinstance(target, int):
-            target -= 1
         # Correct from our internal 0-based representation to external 1-based.
         target_frame_cv2 = (self.base_timecode + target).get_frames()
+        if target_frame_cv2 > 0:
+            target_frame_cv2 -= 1
         # Have to seek one behind and call grab() after to that the VideoCapture
         # returns a valid timestamp when using CAP_PROP_POS_MSEC.
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame_cv2)
-        self._cap.grab()
-        self._has_grabbed = True
+        if target > 0:
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame_cv2)
+            self._cap.grab()
+            self._has_grabbed = True
+            self._has_seeked = False
+        else:
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame_cv2)
+            self._has_grabbed = False
+            self._has_seeked = True
 
     def reset(self):
         """ Close and re-open the VideoStream (should be equivalent to calling `seek(0)`). """
+        self.seek(0)
         self._cap.release()
         self._open_capture(self._frame_rate)
 
-    def read(self, decode: bool = True, advance: bool = True) -> Optional[ndarray]:
+    def read(self, decode: bool = True, advance: bool = True) -> Union[ndarray, bool]:
         """ Return next frame (or current if advance = False), or None if end of video.
 
-        If decode = False, None will be returned, but will be slightly faster.
+        If decode = False, None will be returned, but will be slightly faster.  Instead a
+        boolean indicating if the next frame was advanced or not is returned.
 
-        If decode and advance are both False, equivalent to a no-op.
-
-        It is undefined what happens if you call `read` with `advance=False` after calling `seek`.
+        If decode and advance are both False, equivalent to a no-op, and the return value should
+        be discarded/ignored.
         """
         if not self._cap.isOpened():
-            return None
+            return False
         if advance:
-            self._cap.grab()
-            self._has_grabbed = True
+            self._has_grabbed = self._cap.grab()
             self._has_seeked = False
         if decode and self._has_grabbed:
             _, frame = self._cap.retrieve()
             return frame
-        return None
+        return self._has_grabbed
 
     #
     # Private Methods

@@ -36,13 +36,15 @@ test case material.
 # pylint: disable=redefined-outer-name
 
 # PySceneDetect Library Imports
-from scenedetect.scene_manager import SceneManager
-from scenedetect.frame_timecode import FrameTimecode
-from scenedetect.video_manager import VideoManager
-from scenedetect.stats_manager import StatsManager
+from scenedetect import SceneManager, FrameTimecode, StatsManager
+from scenedetect.video_stream import VideoStream
+from scenedetect.scene_detector import SceneDetector
 from scenedetect.detectors import ContentDetector
 from scenedetect.detectors import ThresholdDetector
 from scenedetect.detectors import AdaptiveDetector
+from scenedetect.backends.opencv import VideoStreamCv2
+
+from typing import Type
 
 
 # Test case ground truth format: (threshold, [scene start frame])
@@ -51,72 +53,68 @@ TEST_MOVIE_CLIP_GROUND_TRUTH_CONTENT = [
     (27, [1198, 1226, 1260, 1281, 1334, 1365, 1590, 1697, 1871])
 ]
 
-
-# TODO: Remove when an actual detector factory is created.
-def create_detector(detector_type, video_manager):
+#
+def create_detector(detector_type: Type, video: VideoStream) -> SceneDetector:
+    """ Factory function for creating a detector.  Required since some detectors require
+    additional parameters. Used so all have the same signature, thus a single test case
+    can be written over multiple detectors.
+    """
     if detector_type == AdaptiveDetector:
-        return detector_type(video_manager=video_manager)
+        return detector_type(video)
     return detector_type()
 
 
-
 def test_content_detector(test_movie_clip):
-    """ Test SceneManager with VideoManager and ContentDetector. """
+    """ Test SceneManager with VideoStreamCv2 and ContentDetector. """
     for threshold, start_frames in TEST_MOVIE_CLIP_GROUND_TRUTH_CONTENT:
-        vm = VideoManager([test_movie_clip])
+        video = VideoStreamCv2(test_movie_clip)
         sm = SceneManager()
         sm.add_detector(ContentDetector(threshold=threshold))
 
-        try:
-            video_fps = vm.get_framerate()
-            start_time = FrameTimecode('00:00:50', video_fps)
-            end_time = FrameTimecode('00:01:19', video_fps)
-
-            vm.set_duration(start_time=start_time, end_time=end_time)
-            sm.auto_downscale = True
-
-            vm.start()
-            sm.detect_scenes(frame_source=vm)
-            scene_list = sm.get_scene_list()
-            assert len(scene_list) == len(start_frames)
-            detected_start_frames = [
-                timecode.get_frames() for timecode, _ in scene_list ]
-            assert all(x == y for (x, y) in zip(start_frames, detected_start_frames))
-
-        finally:
-            vm.release()
-
-
-def test_adaptive_detector(test_movie_clip):
-    """ Test SceneManager with VideoManager and AdaptiveDetector. """
-    # We use the ground truth of ContentDetector with threshold=27.
-    start_frames = TEST_MOVIE_CLIP_GROUND_TRUTH_CONTENT[1][1]
-    vm = VideoManager([test_movie_clip])
-    sm = SceneManager()
-    assert sm._stats_manager is None
-    # The SceneManager should implicitly create a StatsManager since this
-    # detector requires it.
-    sm.add_detector(AdaptiveDetector(video_manager=vm))
-    assert sm._stats_manager is not None
-
-    try:
-        video_fps = vm.get_framerate()
+        video_fps = video.frame_rate
         start_time = FrameTimecode('00:00:50', video_fps)
         end_time = FrameTimecode('00:01:19', video_fps)
 
-        vm.set_duration(start_time=start_time, end_time=end_time)
+        video.set_duration(start_time=start_time, end_time=end_time)
         sm.auto_downscale = True
 
-        vm.start()
-        sm.detect_scenes(frame_source=vm)
+        video.start()
+        sm.detect_scenes(video)
         scene_list = sm.get_scene_list()
         assert len(scene_list) == len(start_frames)
         detected_start_frames = [
             timecode.get_frames() for timecode, _ in scene_list ]
         assert all(x == y for (x, y) in zip(start_frames, detected_start_frames))
 
-    finally:
-        vm.release()
+
+
+def test_adaptive_detector(test_movie_clip):
+    """ Test SceneManager with VideoStreamCv2 and AdaptiveDetector. """
+    # We use the ground truth of ContentDetector with threshold=27.
+    start_frames = TEST_MOVIE_CLIP_GROUND_TRUTH_CONTENT[1][1]
+    video = VideoStreamCv2(test_movie_clip)
+    sm = SceneManager()
+    assert sm._stats_manager is None
+    # The SceneManager should implicitly create a StatsManager since this
+    # detector requires it.
+    sm.add_detector(AdaptiveDetector(video))
+    assert sm._stats_manager is not None
+
+    video_fps = video.frame_rate
+    start_time = FrameTimecode('00:00:50', video_fps)
+    end_time = FrameTimecode('00:01:19', video_fps)
+
+    video.set_duration(start_time=start_time, end_time=end_time)
+    sm.auto_downscale = True
+
+    video.start()
+    sm.detect_scenes(video)
+    scene_list = sm.get_scene_list()
+    assert len(scene_list) == len(start_frames)
+    detected_start_frames = [
+        timecode.get_frames() for timecode, _ in scene_list ]
+    assert all(x == y for (x, y) in zip(start_frames, detected_start_frames))
+
 
 
 # Defaults for now.
@@ -125,59 +123,52 @@ TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD = [
 ]
 
 def test_threshold_detector(test_video_file):
-    """ Test SceneManager with VideoManager and ThresholdDetector. """
-    vm = VideoManager([test_video_file])
+    """ Test SceneManager with VideoStreamCv2 and ThresholdDetector. """
+    video = VideoStreamCv2(test_video_file)
     sm = SceneManager()
     sm.add_detector(ThresholdDetector())
 
-    try:
-        sm.auto_downscale = True
+    sm.auto_downscale = True
 
-        vm.start()
-        sm.detect_scenes(frame_source=vm)
-        scene_list = sm.get_scene_list()
-        assert len(scene_list) == len(TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD)
-        detected_start_frames = [
-            timecode.get_frames() for timecode, _ in scene_list ]
-        assert all(x == y for (x, y) in zip(
-            TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD, detected_start_frames))
-
-    finally:
-        vm.release()
+    video.start()
+    sm.detect_scenes(video)
+    scene_list = sm.get_scene_list()
+    assert len(scene_list) == len(TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD)
+    detected_start_frames = [
+        timecode.get_frames() for timecode, _ in scene_list ]
+    assert all(x == y for (x, y) in zip(
+        TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD, detected_start_frames))
 
 
 
 def test_detectors_with_stats(test_video_file):
     """ Test all detectors functionality with a StatsManager. """
     for detector in [ContentDetector, ThresholdDetector, AdaptiveDetector]:
-        vm = VideoManager([test_video_file])
+        video = VideoStreamCv2(test_video_file)
         stats = StatsManager()
         sm = SceneManager(stats_manager=stats)
-        sm.add_detector(create_detector(detector, vm))
+        sm.add_detector(create_detector(detector, video))
 
-        try:
-            end_time = FrameTimecode('00:00:15', vm.get_framerate())
+        end_time = FrameTimecode('00:00:15', video.frame_rate)
 
-            vm.set_duration(end_time=end_time)
-            sm.auto_downscale = True
+        video.set_duration(end_time=end_time)
+        sm.auto_downscale = True
 
-            vm.start()
-            sm.detect_scenes(frame_source=vm)
-            initial_scene_len = len(sm.get_scene_list())
-            assert initial_scene_len > 0   # test case must have at least one scene!
-            # Re-analyze using existing stats manager.
-            sm = SceneManager(stats_manager=stats)
-            sm.add_detector(create_detector(detector, vm))
+        video.start()
+        sm.detect_scenes(video)
+        initial_scene_len = len(sm.get_scene_list())
+        assert initial_scene_len > 0   # test case must have at least one scene!
+        # Re-analyze using existing stats manager.
+        sm = SceneManager(stats_manager=stats)
+        sm.add_detector(create_detector(detector, video))
 
-            vm.release()
-            vm.reset()
-            vm.set_duration(end_time=end_time)
-            sm.auto_downscale = True
-            vm.start()
+        video.release()
+        video.reset()
+        video.set_duration(end_time=end_time)
+        sm.auto_downscale = True
+        video.start()
 
-            sm.detect_scenes(frame_source=vm)
-            scene_list = sm.get_scene_list()
-            assert len(scene_list) == initial_scene_len
+        sm.detect_scenes(video)
+        scene_list = sm.get_scene_list()
+        assert len(scene_list) == initial_scene_len
 
-        finally:
-            vm.release()

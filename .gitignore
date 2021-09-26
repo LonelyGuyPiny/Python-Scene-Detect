@@ -10,3 +10,10 @@ manual/_build/
 *.jpeg
 *.patch
 .eggs/*
+*.exe
+*.mkv
+*.rtf
+*.txt
+*.m4v
+*.csv
+.vscode/*

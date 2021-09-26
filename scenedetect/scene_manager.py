@@ -26,11 +26,10 @@
 """ ``scenedetect.scene_manager`` Module
 
 This module implements the :py:class:`SceneManager` object, which is used to coordinate
-SceneDetectors and frame sources (:py:class:`VideoManager <scenedetect.video_manager.VideoManager>`
-or ``cv2.VideoCapture``).  This includes creating a cut list (see
-:py:meth:`SceneManager.get_cut_list`) and event list (see :py:meth:`SceneManager.get_event_list`)
-of all changes in scene, which is used to generate a final list of scenes (see
-:py:meth:`SceneManager.get_scene_list`) in the form of a list of start/end
+SceneDetectors and frame sources (:py:class:`VideoStream <scenedetect.video_stream.VideoStream>`).
+This includes creating a cut list (see :py:meth:`SceneManager.get_cut_list`) and event list (see
+:py:meth:`SceneManager.get_event_list`) of all changes in scene, which is used to generate a final
+list of scenes (see :py:meth:`SceneManager.get_scene_list`) in the form of a list of start/end
 :py:class:`FrameTimecode <scenedetect.frame_timecode.FrameTimecode>` objects at each scene boundary.
 
 The :py:class:`FrameTimecode <scenedetect.frame_timecode.FrameTimecode>` objects and `tuples`
@@ -61,7 +60,7 @@ from scenedetect.platform import get_and_create_path
 from scenedetect.platform import get_aspect_ratio
 
 # PySceneDetect Library Imports
-from scenedetect.video_manager import VideoManager
+from scenedetect.video_stream import VideoStream
 from scenedetect.frame_timecode import FrameTimecode
 from scenedetect.platform import get_csv_writer
 from scenedetect.platform import get_cv2_imwrite_params
@@ -297,7 +296,7 @@ def write_scene_list_html(output_html_filename,
 
 
 def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
-                video_manager: VideoManager,
+                video: VideoStream,
                 num_images: int = 3,
                 frame_margin: int = 1,
                 image_extension: str = 'jpg',
@@ -314,7 +313,7 @@ def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
     Arguments:
         scene_list: A list of scenes (pairs of FrameTimecode objects) returned
             from calling a SceneManager's detect_scenes() method.
-        video_manager: A VideoManager object corresponding to the scene list.
+        video: A VideoStream object corresponding to the scene list.
             Note that the video will be closed/re-opened and seeked through.
         num_images: Number of images to generate for each scene.  Minimum is 1.
         frame_margin: Number of frames to pad each scene around the beginning
@@ -344,7 +343,6 @@ def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
             Specifying only width will rescale the image to that number of pixels wide
             while preserving the aspect ratio.
 
-
     Returns:
         Dictionary of the format { scene_num : [image_paths] }, where scene_num is the
         number of the scene in scene_list (starting from 1), and image_paths is a list of
@@ -365,12 +363,12 @@ def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
     imwrite_param = [get_cv2_imwrite_params()[image_extension], encoder_param
                     ] if encoder_param is not None else []
 
-    video_name = video_manager.get_video_name()
+    video_name = video.get_video_name()
 
     # Reset video manager.
-    video_manager.release()
-    video_manager.reset()
-    video_manager.start()
+    video.release()
+    video.reset()
+    video.start()
 
     # Setup flags and init progress bar if available.
     completed = True
@@ -415,14 +413,14 @@ def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
     ]
 
     image_filenames = {i: [] for i in range(len(timecode_list))}
-    aspect_ratio = get_aspect_ratio(video_manager)
+    aspect_ratio = get_aspect_ratio(video)
     if abs(aspect_ratio - 1.0) < 0.01:
         aspect_ratio = None
 
     for i, scene_timecodes in enumerate(timecode_list):
         for j, image_timecode in enumerate(scene_timecodes):
-            video_manager.seek(image_timecode)
-            ret_val, frame_im = video_manager.read()
+            video.seek(image_timecode)
+            ret_val, frame_im = video.read()
             if ret_val:
                 file_path = '%s.%s' % (filename_template.safe_substitute(
                     VIDEO_NAME=video_name,
@@ -473,8 +471,8 @@ def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
 
 class SceneManager(object):
     """ The SceneManager facilitates detection of scenes via the :py:meth:`detect_scenes` method,
-    given a video source (:py:class:`VideoManager <scenedetect.video_manager.VideoManager>`
-    or cv2.VideoCapture), and SceneDetector algorithms added via the :py:meth:`add_detector` method.
+    given a video source (:py:class:`VideoStream <scenedetect.video.VideoStream>`), and
+    SceneDetector algorithms added via the :py:meth:`add_detector` method.
 
     Can also optionally take a StatsManager instance during construction to cache intermediate
     scene detection calculations, making subsequent calls to :py:meth:`detect_scenes` much faster,
@@ -507,6 +505,8 @@ class SceneManager(object):
         # Ensure clear() is called first.
         if value < 1:
             raise ValueError("Downscale factor must be a positive integer >= 1!")
+        if self.auto_downscale:
+            logger.warning("Downscale factor will be ignored because auto_downscale=True!")
         if value is not None and not isinstance(value, int):
             logger.warning("Downscale factor will be truncated to integer!")
             value = int(value)
@@ -562,13 +562,7 @@ class SceneManager(object):
         # type: () -> None
         """ Clears all cuts/scenes and resets the SceneManager's position.
 
-        Any statistics generated are still saved in the StatsManager object
-        passed to the SceneManager's constructor, and thus, subsequent
-        calls to detect_scenes, using the same frame source reset at the
-        initial time (if it is a VideoManager, use the reset() method),
-        will use the cached frame metrics that were computed and saved
-        in the previous call to detect_scenes.
-        """
+        Any statistics generated are still saved in the bound StatsManager if any. """
         self._cutting_list.clear()
         self._event_list.clear()
         self._num_frames = 0
@@ -687,24 +681,23 @@ class SceneManager(object):
         return frame if downscale_factor == 1 else frame[::downscale_factor, ::downscale_factor, :]
 
     def detect_scenes(self,
-                      frame_source: VideoManager,
-                      end_time: Union[int, FrameTimecode]=None,
+                      video: VideoStream,
+                      end_time: Union[FrameTimecode, int]=None,
                       frame_skip: int=0,
                       show_progress: bool=True,
                       callback: Callable[[np.ndarray, int], None] = None):
-        # type: (VideoManager, Union[int, FrameTimecode],
-        #        Optional[Union[int, FrameTimecode]], Optional[bool],
-        #        Optional[Callable[numpy.ndarray]) -> int
-        """ Perform scene detection on the given frame_source using the added SceneDetectors.
+        """ Perform scene detection on the given video using the added SceneDetectors.
 
-        Blocks until all frames in the frame_source have been processed. Results can
+        Blocks until all frames in the video have been processed. Results can
         be obtained by calling either the get_scene_list() or get_cut_list() methods.
 
         Arguments:
-            frame_source: A VideoStream object pointing.
-            end_time (int or FrameTimecode): Maximum number of frames to detect
-                (set to None to detect all available frames). Only needed for OpenCV
-                VideoCapture objects; for VideoManager objects, use set_duration() instead.
+            video: A VideoStream object pointing.
+            end_time (int or FrameTimecode): Maximum amount of time/number of frames to
+                detect (set to None to detect all available frames).
+
+                TODO(1.0): Add duration as well and clarify behavioral difference.
+
             frame_skip (int): Not recommended except for extremely high framerate videos.
                 Number of frames to skip (i.e. process every 1 in N+1 frames,
                 where N is frame_skip, processing only 1/N+1 percent of the video,
@@ -724,25 +717,17 @@ class SceneManager(object):
                 was constructed with a StatsManager object.
         """
 
-        # Temporarily keeping downscaling in VideoManager until transition to VideoStream
-        # for performance reasons.
-        use_old_downscale = True
-        if self.auto_downscale:
-            frame_source.set_downscale_factor()
-        else:
-            frame_source.set_downscale_factor(self._downscale)
-
         if frame_skip > 0 and self._stats_manager is not None:
             raise ValueError('frame_skip must be 0 when using a StatsManager.')
 
         start_frame = 0
         curr_frame = 0
         end_frame = None
-        self._base_timecode = FrameTimecode(timecode=0, fps=frame_source.get(cv2.CAP_PROP_FPS))
+        self._base_timecode = FrameTimecode(timecode=0, fps=video.get(cv2.CAP_PROP_FPS))
 
-        total_frames = math.trunc(frame_source.get(cv2.CAP_PROP_FRAME_COUNT))
+        total_frames = math.trunc(video.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        start_time = frame_source.get(cv2.CAP_PROP_POS_FRAMES)
+        start_time = video.get(cv2.CAP_PROP_POS_FRAMES)
         if isinstance(start_time, FrameTimecode):
             start_frame = start_time.get_frames()
         elif start_time is not None:
@@ -778,18 +763,15 @@ class SceneManager(object):
                 # *always* required for *all* frames when frame_skip > 0.
                 if (self._is_processing_required(self._num_frames + start_frame)
                         or self._is_processing_required(self._num_frames + start_frame + 1)):
-                    ret_val, frame_im = frame_source.read()
+                    ret_val, frame_im = video.read()
                 else:
-                    ret_val = frame_source.grab()
+                    ret_val = video.read(decode=False)
                     frame_im = None
 
                 if not ret_val:
                     break
 
-                # Will be switched on when VideoManager is deprecated.
-                if not use_old_downscale:
-                    # Downscale frame if required.
-                    frame_im = self._downscale_frame(frame_im)
+                frame_im = self._downscale_frame(frame_im)
 
                 self._process_frame(self._num_frames + start_frame, frame_im, callback)
 
@@ -800,7 +782,7 @@ class SceneManager(object):
 
                 if frame_skip > 0:
                     for _ in range(frame_skip):
-                        if not frame_source.grab():
+                        if not video.grab():
                             break
                         curr_frame += 1
                         self._num_frames += 1
