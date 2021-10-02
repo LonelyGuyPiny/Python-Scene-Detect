@@ -109,7 +109,7 @@ class AdaptiveDetector(ContentDetector):
             frame_num, [metric_key])[0]
 
 
-    def post_process(self, _):
+    def post_process(self, start_frame: int, end_frame: int):
         """
         After an initial run through the video to detect content change
         between each frame, we try to identify fast cuts as short peaks in the
@@ -120,9 +120,6 @@ class AdaptiveDetector(ContentDetector):
         more than a single frame.
         """
         cut_list = []
-        _, start_timecode, end_timecode = self.video_manager.get_duration()
-        start_frame = start_timecode.get_frames()
-        end_frame = end_timecode.get_frames()
         adaptive_threshold = self.adaptive_threshold
         window_width = self.window_width
         last_cut = None

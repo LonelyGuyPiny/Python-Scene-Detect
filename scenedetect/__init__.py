@@ -45,12 +45,7 @@ from scenedetect.stats_manager import StatsManager
 
 # Used for module identification and when printing version & about info
 # (e.g. calling `scenedetect version` or `scenedetect about`).
-<<<<<<< HEAD
-__version__ = 'v0.5.6.1'
-=======
 __version__ = 'v1.0-dev'
->>>>>>> 81ced61... Part 1 of transition from VideoManager -> SceneManager.
-
 # About & copyright message string shown for the 'about' CLI command (scenedetect about).
 
 ABOUT_STRING = """

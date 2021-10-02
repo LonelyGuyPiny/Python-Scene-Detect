@@ -179,7 +179,7 @@ class ThresholdDetector(SceneDetector):
         return cut_list
 
 
-    def post_process(self, frame_num):
+    def post_process(self, start_frame: int, end_frame: int):
         """Writes a final scene cut if the last detected fade was a fade-out.
 
         Only writes the scene cut if add_final_scene is true, and the last fade
@@ -193,7 +193,7 @@ class ThresholdDetector(SceneDetector):
         # fade-outs, as a scene cut is already added when a fade-in is found.
         cut_times = []
         if self.last_fade['type'] == 'out' and self.add_final_scene and (
-                (self.last_scene_cut is None and frame_num >= self.min_scene_len) or
-                (frame_num - self.last_scene_cut) >= self.min_scene_len):
+                (self.last_scene_cut is None and end_frame >= self.min_scene_len) or
+                (end_frame - self.last_scene_cut) >= self.min_scene_len):
             cut_times.append(self.last_fade['frame'])
         return cut_times

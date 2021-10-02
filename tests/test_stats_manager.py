@@ -136,13 +136,10 @@ def test_detector_metrics(test_video_file):
     assert stats_manager._registered_metrics
 
     video_fps = video.frame_rate
-    start_time = FrameTimecode('00:00:00', video_fps)
     duration = FrameTimecode('00:00:20', video_fps)
 
-    video.set_duration(start_time=start_time, end_time=duration)
     scene_manager.auto_downscale = True
-    video.start()
-    scene_manager.detect_scenes(frame_source=video)
+    scene_manager.detect_scenes(video=video, duration=duration)
 
     # Check that metrics were written to the StatsManager.
     assert stats_manager._frame_metrics
@@ -251,13 +248,10 @@ def test_save_load_from_video(test_video_file):
     scene_manager.add_detector(ContentDetector())
 
     video_fps = video.frame_rate
-    start_time = FrameTimecode('00:00:00', video_fps)
     duration = FrameTimecode('00:00:20', video_fps)
 
-    video.set_duration(start_time=start_time, end_time=duration)
     scene_manager.auto_downscale = True
-    video.start()
-    scene_manager.detect_scenes(frame_source=video)
+    scene_manager.detect_scenes(video=video, duration=duration)
 
     with open(TEST_STATS_FILES[0], 'w') as stats_file:
         stats_manager.save_to_csv(stats_file, base_timecode)

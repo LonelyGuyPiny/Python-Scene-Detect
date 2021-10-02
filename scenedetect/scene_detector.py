@@ -35,7 +35,7 @@ are expected to provide in order to be compatible with PySceneDetect.
 
 # pylint: disable=unused-argument, no-self-use
 
-
+# TODO(v1.0): Make this an ABC.
 class SceneDetector(object):
     """ Base class to inherit from when implementing a scene detection algorithm.
 
@@ -102,8 +102,7 @@ class SceneDetector(object):
         return []
 
 
-    def post_process(self, frame_num):
-        # type: (int) -> List[int]
+    def post_process(self, start_frame: int, end_frame: int):
         """ Post Process: Performs any processing after the last frame has been read.
 
         Prototype method, no actual detection.

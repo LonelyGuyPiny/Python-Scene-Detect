@@ -55,9 +55,9 @@ import math
 # Third-Party Library Imports
 import cv2
 import numpy as np
+from numpy.lib.arraysetops import isin
 from scenedetect.platform import tqdm
 from scenedetect.platform import get_and_create_path
-from scenedetect.platform import get_aspect_ratio
 
 # PySceneDetect Library Imports
 from scenedetect.video_stream import VideoStream
@@ -363,12 +363,7 @@ def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
     imwrite_param = [get_cv2_imwrite_params()[image_extension], encoder_param
                     ] if encoder_param is not None else []
 
-    video_name = video.get_video_name()
-
-    # Reset video manager.
-    video.release()
     video.reset()
-    video.start()
 
     # Setup flags and init progress bar if available.
     completed = True
@@ -413,17 +408,17 @@ def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
     ]
 
     image_filenames = {i: [] for i in range(len(timecode_list))}
-    aspect_ratio = get_aspect_ratio(video)
+    aspect_ratio = video.aspect_ratio
     if abs(aspect_ratio - 1.0) < 0.01:
         aspect_ratio = None
 
     for i, scene_timecodes in enumerate(timecode_list):
         for j, image_timecode in enumerate(scene_timecodes):
             video.seek(image_timecode)
-            ret_val, frame_im = video.read()
-            if ret_val:
+            frame_im = video.read()
+            if frame_im is not None:
                 file_path = '%s.%s' % (filename_template.safe_substitute(
-                    VIDEO_NAME=video_name,
+                    VIDEO_NAME=video.name,
                     SCENE_NUMBER=scene_num_format % (i + 1),
                     IMAGE_NUMBER=image_num_format % (j + 1),
                     FRAME_NUMBER=image_timecode.get_frames()), image_extension)
@@ -486,8 +481,8 @@ class SceneManager(object):
         self._detector_list: List[SceneDetector] = []
         self._sparse_detector_list: List[SparseSceneDetector] = []
         self._stats_manager: Optional[StatsManager] = stats_manager
-        self._num_frames: int = 0
-        self._start_frame: int = 0
+        self._num_frames = 0
+        self._start_frame = 0
         self._base_timecode: Optional[FrameTimecode] = None
         self._downscale: int = 1
         self._auto_downscale: bool = False
@@ -658,18 +653,15 @@ class SceneManager(object):
                 callback(frame_im, frame_num)
             self._event_list += events
 
-    def _is_processing_required(self, frame_num):
-        # type(int) -> bool
+    def _is_processing_required(self, frame_num: int) -> bool:
         """ Is Processing Required: Returns True if frame metrics not in StatsManager,
-        False otherwise.
-        """
+        False otherwise. """
         return all([detector.is_processing_required(frame_num) for detector in self._detector_list])
 
-    def _post_process(self, frame_num):
-        # type(int, numpy.ndarray) -> None
+    def _post_process(self, start_frame: int, end_frame: int):
         """ Adds any remaining cuts to the cutting list after processing the last frame. """
         for detector in self._detector_list:
-            self._cutting_list += detector.post_process(frame_num)
+            self._cutting_list += detector.post_process(start_frame=start_frame, end_frame=end_frame)
 
     def _downscale_frame(self, frame: np.ndarray) -> np.ndarray:
         """Downscales frame if required (i.e. factor > 1), otherwise retursn original frame."""
@@ -682,6 +674,7 @@ class SceneManager(object):
 
     def detect_scenes(self,
                       video: VideoStream,
+                      duration: Union[FrameTimecode, int]=None,
                       end_time: Union[FrameTimecode, int]=None,
                       frame_skip: int=0,
                       show_progress: bool=True,
@@ -693,11 +686,10 @@ class SceneManager(object):
 
         Arguments:
             video: A VideoStream object pointing.
-            end_time (int or FrameTimecode): Maximum amount of time/number of frames to
-                detect (set to None to detect all available frames).
-
-                TODO(1.0): Add duration as well and clarify behavioral difference.
-
+            duration (int or FrameTimecode): Maximum amount of frames to detect. If not specified,
+                stream will be processed until end. Cannot be specified if `end_time` is set.
+            end_time (int or FrameTimecode): Last frame number to process. If not specified,
+                stream will be processed until end. Cannot be specified if `duration` is set.
             frame_skip (int): Not recommended except for extremely high framerate videos.
                 Number of frames to skip (i.e. process every 1 in N+1 frames,
                 where N is frame_skip, processing only 1/N+1 percent of the video,
@@ -719,64 +711,56 @@ class SceneManager(object):
 
         if frame_skip > 0 and self._stats_manager is not None:
             raise ValueError('frame_skip must be 0 when using a StatsManager.')
+        if duration is not None and end_time is not None:
+            raise ValueError('duration and end_time cannot be set at the same time!')
+        if duration is not None and duration < 0:
+            raise ValueError('duration must be greater than or equal to 0!')
+        if end_time is not None and end_time < 0:
+            raise ValueError('end_time must be greater than or equal to 0!')
 
-        start_frame = 0
-        curr_frame = 0
-        end_frame = None
-        self._base_timecode = FrameTimecode(timecode=0, fps=video.get(cv2.CAP_PROP_FPS))
+        self._base_timecode = video.base_timecode
+        self._start_frame = video.frame_number
 
-        total_frames = math.trunc(video.get(cv2.CAP_PROP_FRAME_COUNT))
+        if duration is not None:
+            end_time = duration + self._start_frame
 
-        start_time = video.get(cv2.CAP_PROP_POS_FRAMES)
-        if isinstance(start_time, FrameTimecode):
-            start_frame = start_time.get_frames()
-        elif start_time is not None:
-            start_frame = int(start_time)
-        self._start_frame = start_frame
+        if end_time is not None:
+            end_time = self._base_timecode + end_time
 
-        curr_frame = start_frame
-
-        if isinstance(end_time, FrameTimecode):
-            end_frame = end_time.get_frames()
-        elif end_time is not None:
-            end_frame = int(end_time)
-
-        if end_frame is not None:
-            total_frames = end_frame
-
-        if start_frame is not None and not isinstance(start_time, FrameTimecode):
-            total_frames -= start_frame
-
-        if total_frames < 0:
-            total_frames = 0
+        if end_time is not None and end_time < video.duration:
+            total_frames = (end_time - self._start_frame) + 1
+        else:
+            total_frames = (video.duration.get_frames() - self._start_frame) + 1
+        # Ensure total_frames is an int.
+        if isinstance(total_frames, FrameTimecode):
+            total_frames = total_frames.get_frames()
 
         progress_bar = None
         if tqdm and show_progress:
             progress_bar = tqdm(total=total_frames, unit='frames', dynamic_ncols=True)
         try:
-
+            last_frame = 0
+            decoded = False
+            frame_im = None
             while True:
-                if end_frame is not None and curr_frame >= end_frame:
-                    break
-                # We don't compensate for frame_skip here as the frame_skip option
-                # is not allowed when using a StatsManager - thus, processing is
-                # *always* required for *all* frames when frame_skip > 0.
-                if (self._is_processing_required(self._num_frames + start_frame)
-                        or self._is_processing_required(self._num_frames + start_frame + 1)):
-                    ret_val, frame_im = video.read()
+                # The following is a hack for ContentDetector since it requires frame deltas.
+                # Ideally this should be handled by the ContentDetector or some configuration
+                # for detectors.
+                if (self._is_processing_required(video.frame_number)
+                        or self._is_processing_required(video.frame_number + 1)):
+                    frame_im = video.read()
+                    if frame_im is False:
+                        break
+                    frame_im = self._downscale_frame(frame_im)
                 else:
-                    ret_val = video.read(decode=False)
-                    frame_im = None
+                    if video.read(decode=False) is False:
+                        break
 
-                if not ret_val:
-                    break
+                # Frames are internally indexed from 0 (i.e. the first frame is frame 0).
+                last_frame = video.frame_number - 1
+                decoded = True
+                self._process_frame(last_frame, frame_im, callback)
 
-                frame_im = self._downscale_frame(frame_im)
-
-                self._process_frame(self._num_frames + start_frame, frame_im, callback)
-
-                curr_frame += 1
-                self._num_frames += 1
                 if progress_bar:
                     progress_bar.update(1)
 
@@ -784,18 +768,19 @@ class SceneManager(object):
                     for _ in range(frame_skip):
                         if not video.grab():
                             break
-                        curr_frame += 1
-                        self._num_frames += 1
                         if progress_bar:
                             progress_bar.update(1)
 
-            self._post_process(curr_frame)
-
-            num_frames = curr_frame - start_frame
+                if end_time is not None and video.position >= end_time:
+                    break
+            # Only call post process if we actually processed any frames.
+            if decoded:
+                self._post_process(self._start_frame, last_frame)
 
         finally:
 
             if progress_bar:
                 progress_bar.close()
 
-        return num_frames
+        self._num_frames = video.frame_number - self._start_frame
+        return self._num_frames

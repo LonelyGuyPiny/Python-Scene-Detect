@@ -106,6 +106,12 @@ class VideoStream(ABC):
 
     @property
     @abstractmethod
+    def name(self) -> str:
+        """Name of the video, without extension, or device."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
     def is_seekable(self) -> bool:
         """True if seek() is allowed, False otherwise."""
         raise NotImplementedError
@@ -181,7 +187,8 @@ class VideoStream(ABC):
 
     @abstractmethod
     def seek(self, target: Union[FrameTimecode, float, int]):
-        """Seek to the given timecode. The given frame will be the next one returned by `read`
+        """Seek to the given timecode, frame, or time in seconds. The next frame returned from
+        read() will be target + 1.
         with advance=True (the default).
 
         Frame 0 has a (presentation) timecode of 0.

@@ -47,6 +47,8 @@ from scenedetect.backends.opencv import VideoStreamCv2
 ## List of Required/TBD Test Cases
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
+# TODO: End of video read()/seek behaviour!
+
 # TODO: Add checks that frame was decoded properly - compare against
 # a set of hand-picked frames? Or just a few colour samples?
 
@@ -154,66 +156,102 @@ class TestVideoStream:
         stream.read(decode=False, advance=False)
         assert stream.frame_number == 1
 
-    def test_seek(self, vs_type: Type[VideoStream], test_video: VideoParameters):
-        """Validate seeking behaviour."""
-        #
-        # Basic seeking "identities".
-        #
+    def test_time_invariants(self, vs_type: Type[VideoStream], test_video: VideoParameters):
+        """Validates basic time keeping identities/invariants on the `VideoStream.position`,
+        `VideoStream.position_ms`, and `VideoStream.frame_number` properties."""
         stream = vs_type(test_video.path)
-        base_timecode = stream.base_timecode
-        assert stream.position == base_timecode
+
+        # Before any frame has been decoded, everything is at time/frame 0.
+        assert stream.position == stream.base_timecode
         assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
         assert stream.frame_number == 0
 
         stream.read()
-
-        assert stream.position == base_timecode
+        # After the first frame has been decoded, position is still at 0 (PTS),
+        # but frame_number is 1.
+        assert stream.position == stream.base_timecode
         assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
         assert stream.frame_number == 1
 
-        stream.read()
 
-        assert stream.position == base_timecode + 1
-        assert stream.position_ms == pytest.approx(1000.0 / float(stream.frame_rate),
-                                                   abs=TIME_TOLERANCE_MS)
-        assert stream.frame_number == 2
-
-        #
-        # Test seeking with other input types.
-        #
-        stream.seek(0.0)
-        assert stream.frame_number == 0
-        # FrameTimecode is currently one "behind" the frame_number since it
-        # starts counting from zero. This should eventually be changed.
-        assert stream.position == base_timecode
+        stream.reset()
+        # After resetting the stream, we should be back in the initial time state.
+        assert stream.position == stream.base_timecode
         assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
-
-        stream.seek(stream.base_timecode)
         assert stream.frame_number == 0
-        assert stream.position == base_timecode
-        assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
 
-        # Ensure accuracy over the first hundred frames.
+        # Test invariants over the first 100 frames.
         stream.reset()
 
         for i in range(1, 100 + 1):
             assert stream.read() is not None
-            assert stream.position == base_timecode + (i - 1)
+            assert stream.position == stream.base_timecode + (i - 1)
             assert stream.position_ms == pytest.approx(1000.0 * (i - 1) / float(stream.frame_rate),
                                                        abs=TIME_TOLERANCE_MS)
             assert stream.frame_number == i
         stream.reset()
 
+    def test_seek(self, vs_type: Type[VideoStream], test_video: VideoParameters):
+        """Validate seeking behaviour."""
+        #
+        # Basic timecode "identities".
+        #
+        stream = vs_type(test_video.path)
+
+        # Decode a few frames so we don't start at zero already.
+        for _ in range(100):
+            stream.read()
+
+        # Seek to given time in seconds.
+        stream.seek(0.0)
+        assert stream.frame_number == 0
+        # FrameTimecode is currently one "behind" the frame_number since it
+        # starts counting from zero. This should eventually be changed.
+        assert stream.position == stream.base_timecode
+        assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
+
+        stream.seek(2.0)
+        stream.read()
+        assert stream.frame_number == 1 + int(stream.frame_rate * 2.0)
+        # FrameTimecode is currently one "behind" the frame_number since it
+        # starts counting from zero. This should eventually be changed.
+        assert stream.position == stream.base_timecode + 2.0
+        assert stream.position_ms == pytest.approx(2000.0, abs=1000.0 / stream.frame_rate)
+
+        # Seek to given FrameTimecode.
+        stream.seek(stream.base_timecode)
+        assert stream.frame_number == 0
+        assert stream.position == stream.base_timecode
+        assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
+
+        # Seek to a given frame number.
         stream.seek(200)
-        assert stream.position == base_timecode + 199
+        assert stream.position == stream.base_timecode + 199
         assert stream.position_ms == pytest.approx(1000.0 * (199.0 / float(stream.frame_rate)),
                                                    abs=TIME_TOLERANCE_MS)
         assert stream.frame_number == 200
         stream.read()
         assert stream.frame_number == 201
-        assert stream.position == base_timecode + 200
+        assert stream.position == stream.base_timecode + 200
         assert stream.position_ms == pytest.approx(1000.0 * (200.0 / float(stream.frame_rate)),
                                                    abs=TIME_TOLERANCE_MS)
+
+        # Seek to given time in seconds.
+        stream.seek(0)
+        assert stream.frame_number == 0
+        # FrameTimecode is currently one "behind" the frame_number since it
+        # starts counting from zero. This should eventually be changed.
+        assert stream.position == stream.base_timecode
+        assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
+        stream.seek(1)
+        assert stream.frame_number == 1
+        # FrameTimecode is currently one "behind" the frame_number since it
+        # starts counting from zero. This should eventually be changed.
+        assert stream.position == stream.base_timecode
+        assert stream.position_ms == pytest.approx(0.0, abs=TIME_TOLERANCE_MS)
+        stream.read()
+        assert stream.frame_number == 2
+
 
 #
 # Tests which only use a single video file

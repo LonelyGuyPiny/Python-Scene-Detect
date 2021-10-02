@@ -103,6 +103,17 @@ class VideoStreamCv2(VideoStream):
         return self._path_or_device
 
     @property
+    def name(self) -> str:
+        """Name of the video, without extension, or device."""
+        if self._is_device:
+            return self.path
+        name = os.path.basename(self.path)
+        last_dot_pos = name.rfind('.')
+        if last_dot_pos >= 0:
+            name = name[:last_dot_pos]
+        return name
+
+    @property
     def is_seekable(self) -> bool:
         """True if seek() is allowed, False otherwise.
 
@@ -159,8 +170,13 @@ class VideoStreamCv2(VideoStream):
         return math.trunc(self._cap.get(cv2.CAP_PROP_POS_FRAMES))
 
     def seek(self, target: Union[FrameTimecode, float, int]):
-        """Seek to the given timecode. The given frame will be the next one returned by `read`
-        with advance=True (the default).
+        """Seek to the given timecode. If given as a frame number, represents the current seek
+        pointer (e.g. if seeking to 0, the next frame decoded will be the first frame).
+
+        This means that, for 1-based indices (first frame is frame #1), the target frame number
+        needs to be converted to 0-based by subtracting one.  For example, if we want to seek to
+        the first frame, we call seek(0) followed by read(). At this point, frame_number will be 1.
+        If we call seek(4) (the *fifth* frame) and then read(), frame_number will be 5.
 
         Seeking past the end of video shall be equivalent to seeking to the last frame.
 
@@ -181,20 +197,17 @@ class VideoStreamCv2(VideoStream):
         if target < 0:
             raise ValueError("Target seek position cannot be negative!")
 
-        # Correct from our internal 0-based representation to external 1-based.
+        # Have to seek one behind and call grab() after to that the VideoCapture
+        # returns a valid timestamp when using CAP_PROP_POS_MSEC.
         target_frame_cv2 = (self.base_timecode + target).get_frames()
         if target_frame_cv2 > 0:
             target_frame_cv2 -= 1
-        # Have to seek one behind and call grab() after to that the VideoCapture
-        # returns a valid timestamp when using CAP_PROP_POS_MSEC.
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame_cv2)
         if target > 0:
-            self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame_cv2)
             self._cap.grab()
             self._has_grabbed = True
             self._has_seeked = False
         else:
-            self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame_cv2)
             self._has_grabbed = False
             self._has_seeked = True
 
@@ -205,10 +218,9 @@ class VideoStreamCv2(VideoStream):
         self._open_capture(self._frame_rate)
 
     def read(self, decode: bool = True, advance: bool = True) -> Union[ndarray, bool]:
-        """ Return next frame (or current if advance = False), or None if end of video.
+        """ Return next frame (or current if advance = False), or False if end of video.
 
-        If decode = False, None will be returned, but will be slightly faster.  Instead a
-        boolean indicating if the next frame was advanced or not is returned.
+        If decode = False, a boolean indicating if the next frame was advanced or not is returned.
 
         If decode and advance are both False, equivalent to a no-op, and the return value should
         be discarded/ignored.
