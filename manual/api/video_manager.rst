@@ -76,35 +76,6 @@ Note that the :py:meth:`VideoManager.read`, :py:meth:`VideoManager.grab` and
 as their OpenCV counterparts.  Likewise, the frame image returned by these
 methods is a standard Numpy ``ndarray`` which can be operated on as expected.
 
-Lastly, when all processing is done, make sure to call :py:meth:`VideoManager.release`
-to cleanup all resources acquired by the :py:class:`VideoManager` object.
-
-.. hint::
-    Use a ``try``/``finally`` block to ensure that the :py:meth:`~VideoManager.release`
-    method is called.  For example:
-
-    .. code:: python
-
-        video_manager = VideoManager(['video.mp4'])
-        try:
-            video_manager.start()
-            while True:
-                ret, im = video_manager.read()
-                if not ret:
-                    break
-            # Do stuff with frame (`im`).
-        finally:
-            # Ensures release() is called even if an exception
-            # is thrown during any code added to process frames.
-            video_manager.release()
-
-
-
-When passing a :py:class:`VideoManager` to a
-:py:class:`SceneManager <scenedetect.scene_manager.SceneManager>` class, the
-:py:meth:`~VideoManager.start` method must already have been called.  See the
-:ref:`example in the SceneManager reference<scenemanager-example>` for more details.
-
 
 ``VideoManager`` Class
 ===============================================================

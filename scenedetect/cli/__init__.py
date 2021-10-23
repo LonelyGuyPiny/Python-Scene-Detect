@@ -154,11 +154,9 @@ def duplicate_command(ctx, param_hint):
     chain=True, context_settings=CLICK_CONTEXT_SETTINGS)
 @click.option(
     '--input', '-i',
-    multiple=True, required=False, metavar='VIDEO',
+    multiple=False, required=False, metavar='VIDEO',
     type=click.STRING, help=
-    '[Required] Input video file.'
-    ' May be specified multiple times to concatenate several videos together.'
-    ' Also supports image sequences and URLs.')
+    '[Required] Input video file. Also supports image sequences and URLs.')
 @click.option(
     '--output', '-o',
     multiple=False, required=False, metavar='DIR',
@@ -256,9 +254,10 @@ def scenedetect_cli(ctx, input, output, framerate, downscale, frame_skip,
         if ctx.obj.output_directory is not None:
             ctx.obj.logger.info('Output directory set:\n  %s', ctx.obj.output_directory)
         ctx.obj.parse_options(
-            input_list=input, framerate=framerate, stats_file=stats, downscale=downscale,
+            input_path=input, framerate=framerate, stats_file=stats, downscale=downscale,
             frame_skip=frame_skip, min_scene_len=min_scene_len, drop_short_scenes=drop_short_scenes)
 
+        ctx.obj.options_processed = True
     except Exception as ex:
         ctx.obj.logger.error('Could not parse CLI options.: %s', ex)
         raise

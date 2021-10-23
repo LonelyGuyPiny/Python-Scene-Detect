@@ -58,6 +58,8 @@ import struct
 import subprocess
 import sys
 
+from typing import Optional
+
 # Third-Party Library Imports
 import cv2
 
@@ -216,7 +218,7 @@ def get_csv_writer(file_handle):
 ## File I/O
 ##
 
-def get_and_create_path(file_path, output_directory=None):
+def get_and_create_path(file_path: str, output_directory: Optional[str]=None):
     # type: (str, Optional[str]) -> str
     """ Get & Create Path: Gets and returns the full/absolute path to file_path
     in the specified output_directory if set, creating any required directories
@@ -235,8 +237,6 @@ def get_and_create_path(file_path, output_directory=None):
         (str) Full path to output file suitable for writing.
 
     """
-    if file_path is None:
-        return None
     # If an output directory is defined and the file path is a relative path, open
     # the file handle in the output directory instead of the working directory.
     if output_directory is not None and not os.path.isabs(file_path):

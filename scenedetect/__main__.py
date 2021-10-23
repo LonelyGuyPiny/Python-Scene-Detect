@@ -51,13 +51,8 @@ def main():
     Passes control flow to the CLI parser (using the click library), whose
     entry point is the decorated scenedetect.cli.scenedetect_cli function.
     """
-
     cli_ctx = CliContext()  # CliContext object passed between CLI commands.
-    try:
-        # pylint: disable=unexpected-keyword-arg, no-value-for-parameter
-        cli.main(obj=cli_ctx)   # Parse CLI arguments with registered callbacks.
-    finally:
-        cli_ctx.cleanup()
+    cli.main(obj=cli_ctx)   # Parse CLI arguments with registered callbacks.
 
 if __name__ == '__main__':
     main()

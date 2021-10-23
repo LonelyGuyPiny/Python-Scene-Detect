@@ -181,12 +181,12 @@ class VideoStream(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def reset(self):
+    def reset(self) -> None:
         """ Close and re-open the VideoStream (equivalent to seeking back to beginning). """
         raise NotImplementedError
 
     @abstractmethod
-    def seek(self, target: Union[FrameTimecode, float, int]):
+    def seek(self, target: Union[FrameTimecode, float, int]) -> None:
         """Seek to the given timecode, frame, or time in seconds. The next frame returned from
         read() will be target + 1.
         with advance=True (the default).
