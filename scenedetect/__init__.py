@@ -40,7 +40,7 @@ This file also contains the PySceneDetect version string (displayed when calling
 # scenedetect.SceneManager instead of scenedetect.scene_manager.SceneManager).
 from scenedetect.scene_manager import SceneManager
 from scenedetect.frame_timecode import FrameTimecode
-from scenedetect.video_manager import VideoManager
+from scenedetect.video_stream import VideoStream
 from scenedetect.stats_manager import StatsManager
 
 # Used for module identification and when printing version & about info

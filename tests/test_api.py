@@ -24,11 +24,11 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-""" PySceneDetect API Test Script
+""" PySceneDetect API Test
 
 Usage: Run as part of standard test suite, but can be manually invoked
 by passing the video file to perform scene detection on as an argument
-to this file, e.g. `python api_test.py SOME_VIDEO.mp4`
+to this file, e.g. `python test_api.py SOME_VIDEO.mp4`
 
 """
 
@@ -44,6 +44,9 @@ from scenedetect.detectors import ContentDetector
 
 STATS_FILE_PATH = 'api_test_statsfile.csv'
 
+#
+# TODO: Add more comprehensive test cases to act as examples.
+#
 
 def test_api(test_video_file):
     # (str) -> None

@@ -80,7 +80,7 @@ logger = logging.getLogger('pyscenedetect')
 # TODO: This value can and should be tuned for performance improvements as much as possible,
 # until accuracy falls, on a large enough dataset. This has yet to be done, but the current
 # value doesn't seem to have caused any issues at least.
-DEFAULT_MIN_WIDTH: int = 260
+DEFAULT_MIN_WIDTH: int = 256
 """The default minimum width a frame will be downscaled to when calculating a downscale factor."""
 
 def compute_downscale_factor(frame_width: int, effective_width: int = DEFAULT_MIN_WIDTH) -> int:
@@ -663,15 +663,6 @@ class SceneManager(object):
         for detector in self._detector_list:
             self._cutting_list += detector.post_process(start_frame=start_frame, end_frame=end_frame)
 
-    def _downscale_frame(self, frame: np.ndarray) -> np.ndarray:
-        """Downscales frame if required (i.e. factor > 1), otherwise retursn original frame."""
-        downscale_factor = 1
-        if self.auto_downscale:
-            downscale_factor = compute_downscale_factor(frame_width=frame.shape[1])
-        else:
-            downscale_factor = self.downscale
-        return frame if downscale_factor == 1 else frame[::downscale_factor, ::downscale_factor, :]
-
     def detect_scenes(self,
                       video: VideoStream,
                       duration: Union[FrameTimecode, int]=None,
@@ -730,10 +721,20 @@ class SceneManager(object):
         if end_time is not None and end_time < video.duration:
             total_frames = (end_time - self._start_frame) + 1
         else:
-            total_frames = (video.duration.get_frames() - self._start_frame) + 1
+            total_frames = (video.duration.get_frames() - self._start_frame)
         # Ensure total_frames is an int.
         if isinstance(total_frames, FrameTimecode):
             total_frames = total_frames.get_frames()
+
+        # Calculate the desired downscale factor and log the effective resolution.
+        if self.auto_downscale:
+            downscale_factor = compute_downscale_factor(frame_width=video.frame_size[0])
+        else:
+            downscale_factor = self.downscale
+        if downscale_factor > 1:
+            logger.info(
+                'Downscale factor set to %d, effective resolution: %d x %d', downscale_factor,
+                video.frame_size[0]//downscale_factor, video.frame_size[1]//downscale_factor)
 
         progress_bar = None
         if tqdm and show_progress:
@@ -751,7 +752,8 @@ class SceneManager(object):
                     frame_im = video.read()
                     if frame_im is False:
                         break
-                    frame_im = self._downscale_frame(frame_im)
+                    if downscale_factor > 1:
+                        frame_im = frame_im[::downscale_factor, ::downscale_factor, :]
                 else:
                     if video.read(decode=False) is False:
                         break
