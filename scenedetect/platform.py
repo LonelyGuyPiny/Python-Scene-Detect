@@ -243,10 +243,7 @@ def get_and_create_path(file_path: str, output_directory: Optional[str]=None):
         file_path = os.path.join(output_directory, file_path)
     # Now that file_path is an absolute path, let's make sure all the directories
     # exist for us to start writing files there.
-    try:
-        os.makedirs(os.path.split(os.path.abspath(file_path))[0])
-    except OSError:
-        pass
+    os.makedirs(os.path.split(os.path.abspath(file_path))[0], exist_ok=True)
     return file_path
 
 

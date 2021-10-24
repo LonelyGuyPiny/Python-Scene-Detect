@@ -207,19 +207,18 @@ class CliContext(object):
         """
 
         self.logger.debug('Parsing program options.')
-
-        self.frame_skip = frame_skip
-
         # input_path will be None if -i is not specified (e.g. when calling `scenedetect help`).
         if input_path is None:
             return
 
         self._init_video_stream(input_path=input_path, framerate=framerate)
+        self.min_scene_len = parse_timecode(min_scene_len, self.video_stream.frame_rate)
+        self.drop_short_scenes = drop_short_scenes
+        self.frame_skip = frame_skip
 
         # Open StatsManager if --stats is specified.
         if stats_file:
-            self.stats_file_path = get_and_create_path(stats_file, self.output_directory)
-            self._open_stats_file()
+            self._open_stats_file(file_path=stats_file)
 
         # Init SceneManager.
         self.logger.debug('Initializing SceneManager.')
@@ -233,8 +232,6 @@ class CliContext(object):
                 self.logger.debug(str(ex))
                 raise click.BadParameter(str(ex), param_hint='downscale factor')
 
-        self.drop_short_scenes = drop_short_scenes
-        self.min_scene_len = parse_timecode(min_scene_len, self.video_stream.frame_rate)
 
 
     def process_input(self):
@@ -388,27 +385,30 @@ class CliContext(object):
             raise click.BadParameter('Failed to get framerate!', param_hint='input video')
 
 
-    def _open_stats_file(self):
+    def _open_stats_file(self, file_path: str):
+        """Initializes this object's StatsManager, loading any existing stats from disk.
+        If the given file does not already exist, it is created here."""
+        self.stats_file_path = get_and_create_path(file_path, self.output_directory)
         self.stats_manager = StatsManager()
-        if self.stats_file_path is not None:
-            if os.path.exists(self.stats_file_path):
-                self.logger.info('Loading frame metrics from stats file: %s',
-                             os.path.basename(self.stats_file_path))
-                try:
-                    with open(self.stats_file_path, 'rt') as stats_file:
-                        self.stats_manager.load_from_csv(stats_file)
-                except StatsFileCorrupt:
-                    error_info = (
-                        'Could not load frame metrics from stats file - file is either corrupt,'
-                        ' or not a valid PySceneDetect stats file. If the file exists, ensure that'
-                        ' it is a valid stats file CSV, otherwise delete it and run PySceneDetect'
-                        ' again to re-generate the stats file.')
-                    error_strs = [
-                        'Could not load stats file.', 'Failed to parse stats file:', error_info ]
-                    self.logger.error('\n'.join(error_strs))
-                    raise click.BadParameter(
-                        '\n  Could not load given stats file, see above output for details.',
-                        param_hint='input stats file')
+
+        self.logger.info('Loading frame metrics from stats file: %s',
+                        os.path.basename(self.stats_file_path))
+        try:
+            with open(self.stats_file_path, 'rt') as stats_file:
+                self.stats_manager.load_from_csv(stats_file)
+        except StatsFileCorrupt:
+            error_info = (
+                'Could not load frame metrics from stats file - file is either corrupt,'
+                ' or not a valid PySceneDetect stats file. If the file exists, ensure that'
+                ' it is a valid stats file CSV, otherwise delete it and run PySceneDetect'
+                ' again to re-generate the stats file.')
+            error_strs = [
+                'Could not load stats file.', 'Failed to parse stats file:', error_info ]
+            self.logger.error('\n'.join(error_strs))
+            # pylint: disable=raise-missing-from
+            raise click.BadParameter(
+                '\n  Could not load given stats file, see above output for details.',
+                param_hint='input stats file')
 
 
     def save_images_command(self, num_images: int, output: Optional[str], name_format: str, jpeg: bool, webp: bool, quality: int,
