@@ -57,7 +57,8 @@ Table of Contents
 
     api
     api/frame_timecode
-    api/video_manager
+    api/video_stream
+    api/backends
     api/scene_manager
     api/stats_manager
     api/scene_detector

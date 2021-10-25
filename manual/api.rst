@@ -20,9 +20,13 @@ main classes/modules provided in the `scenedetect` package:
       class for storing, converting, and performing arithmetic on timecodes
       with frame-accurate precision.
 
-    * :ref:`scenedetect.video_manager 🎥 <scenedetect-video_manager>`: Contains
-      :py:class:`VideoManager <scenedetect.video_manager.VideoManager>`
-      class for loading one or more videos, providing seeking, and downscaling.
+    * :ref:`scenedetect.video_stream 🎥 <scenedetect-video_stream>`: Contains
+      :py:class:`VideoStream <scenedetect.video_stream.VideoStream>`
+      class for loading videos, providing seeking, and downscaling.
+      Supported backends:
+
+        * OpenCV: :py:class:`VideoStreamCv2 <scenedetect.backends.opencv.VideoStreamCv2>`
+        * PyAV: TODO(v1.0)
 
     * :ref:`scenedetect.scene_manager 🎞️ <scenedetect-scene_manager>`: Contains
       :py:class:`SceneManager <scenedetect.scene_manager.SceneManager>`

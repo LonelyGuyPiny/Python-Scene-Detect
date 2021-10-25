@@ -97,3 +97,9 @@ or visit the following URL: [ https://docs.python.org/3/license.html ]
 THE SOFTWARE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, EXPRESS OR IMPLIED.
 """
 
+
+
+#
+# TODO(v1.0): Add a high level `get_scenes` / `get_cuts` function which acts like the API test.
+# Only take in a video path, statsfile, threshold, min_scene_len, fps, and an optional detector.
+#
