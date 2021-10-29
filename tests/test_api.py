@@ -33,7 +33,6 @@ to this file, e.g. `python test_api.py SOME_VIDEO.mp4`
 """
 
 from __future__ import print_function
-import os
 import sys
 
 import scenedetect
@@ -91,10 +90,9 @@ def test_api(test_video_file):
             scene[0].get_timecode(), scene[0].get_frames(),
             scene[1].get_timecode(), scene[1].get_frames(),))
 
-    # We only write to the stats file if a save is required:
-    if stats_manager.is_save_required():
-        with open(STATS_FILE_PATH, 'w') as stats_file:
-            stats_manager.save_to_csv(stats_file, base_timecode)
+    # We need to save the statsfile if we want to re-use these metrics again the
+    # next time we run the program.
+    stats_manager.save_to_csv(STATS_FILE_PATH, base_timecode=base_timecode)
 
 
 

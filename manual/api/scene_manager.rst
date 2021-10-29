@@ -37,6 +37,13 @@ to perform content-aware scene detection using the
 :py:class:`ContentDetector <scenedetect.detectors.content_detector.ContentDetector>`,
 printing a list of scenes, and both saving/loading a stats file.
 
+TODO(v1.0): As the SceneManager will also be responsible for constructing the StatsManager, replace
+the single example with the following three use cases:
+ - Basic usage, no caching of stats
+ - In-memory cache for different thresholds
+ - On-disk cache for persistence
+
+
 .. code:: python
 
     import os
@@ -89,11 +96,8 @@ printing a list of scenes, and both saving/loading a stats file.
                 scene[0].get_timecode(), scene[0].get_frames(),
                 scene[1].get_timecode(), scene[1].get_frames(),))
 
-        # We only write to the stats file if a save is required:
-        if stats_manager.is_save_required():
-            base_timecode = video_manager.get_base_timecode()
-            with open(stats_file_path, 'w') as stats_file:
-                stats_manager.save_to_csv(stats_file, base_timecode)
+        # Store the frame metrics we calculated for the next time the program runs.
+        stats_manager.save_to_csv(stats_file_path, base_timecode=base_timecode)
 
         return scene_list
 

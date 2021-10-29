@@ -395,8 +395,7 @@ class CliContext(object):
         self.logger.info('Loading frame metrics from stats file: %s',
                         os.path.basename(self.stats_file_path))
         try:
-            with open(self.stats_file_path, 'rt') as stats_file:
-                self.stats_manager.load_from_csv(stats_file)
+            self.stats_manager.load_from_csv(self.stats_file_path)
         except StatsFileCorrupt:
             error_info = (
                 'Could not load frame metrics from stats file - file is either corrupt,'
@@ -479,13 +478,12 @@ class CliContext(object):
     def _save_stats(self) -> None:
         """Handles saving the statsfile if -s/--stats was specified."""
         if self.stats_file_path is not None:
+            # We check if the save is required in order to reduce unnecessary log messages.
             if self.stats_manager.is_save_required():
-                with open(self.stats_file_path, 'wt') as stats_file:
-                    self.logger.info('Saving frame metrics to stats file: %s',
-                                 os.path.basename(self.stats_file_path))
-                    base_timecode = self.video_stream.base_timecode
-                    self.stats_manager.save_to_csv(
-                        stats_file, base_timecode)
+                self.logger.info('Saving frame metrics to stats file: %s',
+                                os.path.basename(self.stats_file_path))
+                self.stats_manager.save_to_csv(
+                    self.stats_file_path, base_timecode=self.video_stream.base_timecode)
             else:
                 self.logger.debug('No frame metrics updated, skipping update of the stats file.')
 

@@ -475,6 +475,10 @@ class SceneManager(object):
     """
 
     def __init__(self, stats_manager: Optional[StatsManager] = None):
+        """TODO(v1.0):
+        This class should own a StatsManager instead of taking an optional one. Change
+        to store_stats (default False) and expose a new .stats_manager @property.
+        """
         self._cutting_list: List[FrameTimecode] = []
         self._event_list: List[Tuple[FrameTimecode]] = []
         self._detector_list: List[SceneDetector] = []

@@ -177,14 +177,13 @@ def test_load_hardcoded_file():
         stats_writer.writerow(
             [some_frame_key, some_frame_timecode.get_timecode(), str(some_metric_value)])
 
-        stats_file.close()
 
-        stats_manager.load_from_csv(TEST_STATS_FILES[0])
+    stats_manager.load_from_csv(TEST_STATS_FILES[0])
 
-        # Check that we decoded the correct values.
-        assert stats_manager.metrics_exist(some_frame_key, [some_metric_key])
-        assert stats_manager.get_metrics(
-            some_frame_key, [some_metric_key])[0] == pytest.approx(some_metric_value)
+    # Check that we decoded the correct values.
+    assert stats_manager.metrics_exist(some_frame_key, [some_metric_key])
+    assert stats_manager.get_metrics(
+        some_frame_key, [some_metric_key])[0] == pytest.approx(some_metric_value)
 
 
 
@@ -214,12 +213,12 @@ def test_load_hardcoded_file_backwards_compat():
 
         stats_file.close()
 
-        stats_manager.load_from_csv(TEST_STATS_FILES[0])
+    stats_manager.load_from_csv(TEST_STATS_FILES[0])
 
-        # Check that we decoded the correct values.
-        assert stats_manager.metrics_exist(some_frame_key, [some_metric_key])
-        assert stats_manager.get_metrics(
-            some_frame_key, [some_metric_key])[0] == pytest.approx(some_metric_value)
+    # Check that we decoded the correct values.
+    assert stats_manager.metrics_exist(some_frame_key, [some_metric_key])
+    assert stats_manager.get_metrics(
+        some_frame_key, [some_metric_key])[0] == pytest.approx(some_metric_value)
 
 
 def test_save_load_from_video(test_video_file):
@@ -240,8 +239,7 @@ def test_save_load_from_video(test_video_file):
     scene_manager.auto_downscale = True
     scene_manager.detect_scenes(video, duration=duration)
 
-    with open(TEST_STATS_FILES[0], 'w') as stats_file:
-        stats_manager.save_to_csv(stats_file, base_timecode)
+    stats_manager.save_to_csv(TEST_STATS_FILES[0], base_timecode=base_timecode)
 
     stats_manager_new = StatsManager()
 

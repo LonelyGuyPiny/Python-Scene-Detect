@@ -47,7 +47,9 @@ detectors being used, speeding up subsequent scene detection runs using the same
 
 # Standard Library Imports
 import logging
+from typing import List, TextIO
 import os.path
+from scenedetect.frame_timecode import FrameTimecode
 
 # PySceneDetect Library Imports
 from scenedetect.platform import get_csv_reader
@@ -196,8 +198,8 @@ class StatsManager(object):
         return self._metrics_updated
 
     # TODO(v1.0): Remove csv_file, add path=None, file=None.
-    def save_to_csv(self, csv_file, base_timecode, force_save=True):
-        # type: (File [w], FrameTimecode, bool) -> None
+    def save_to_csv(self, path: str=None, file: TextIO=None, base_timecode: FrameTimecode=None, force_save=True):
+        # type: (str, File [w], FrameTimecode, bool) -> None
         """ Save To CSV: Saves all frame metrics stored in the StatsManager to a CSV file.
 
         Arguments:
@@ -206,7 +208,9 @@ class StatsManager(object):
                 If using an OpenCV VideoCapture, create one using the video framerate by
                 setting base_timecode=FrameTimecode(0, fps=video_framerate).
 
-                TODO(v1.0): Remove this.
+                TODO(v1.0): Remove this by having StatsManager lazy-init it's own StatsManager
+                by accepting a path to a statsfile for the SceneManager (especially since it should
+                own one instead of taking one as an argument upon construction).
 
             force_save: If True, forcably writes metrics out even if one is not required
                 (see `is_save_required`).
@@ -214,26 +218,38 @@ class StatsManager(object):
         Raises:
             IOError: If fail to open file for writing.
         """
-        csv_writer = get_csv_writer(csv_file)
+        if path is not None and file is not None:
+            raise ValueError("Only one of path or file can be specified")
+
         # Ensure we need to write to the file, and that we have data to do so with.
-        if ((self.is_save_required() or force_save) and
+        if not ((self.is_save_required() or force_save) and
                 self._registered_metrics and self._frame_metrics):
-            # Header rows.
-            metric_keys = sorted(list(self._registered_metrics.union(self._loaded_metrics)))
-            csv_writer.writerow(
-                [COLUMN_NAME_FRAME_NUMBER, COLUMN_NAME_TIMECODE] + metric_keys)
-            frame_keys = sorted(self._frame_metrics.keys())
-            logger.info("Writing %d frames to CSV...", len(frame_keys))
-            for frame_key in frame_keys:
-                frame_timecode = base_timecode + frame_key
-                csv_writer.writerow(
-                    [frame_timecode.get_frames(), frame_timecode.get_timecode()] +
-                    [str(metric) for metric in self.get_metrics(frame_key, metric_keys)])
-        else:
             logger.info("No metrics to save.")
+            return
+
+        # If we get a path instead of an open file handle, recursively call ourselves
+        # again but with file handle instead of path.
+        if path is not None:
+            with open(path, 'w') as file:
+                return self.save_to_csv(
+                    file=file, base_timecode=base_timecode, force_save=force_save)
+        csv_writer = get_csv_writer(file)
+
+        # Header rows.
+        metric_keys = sorted(list(self._registered_metrics.union(self._loaded_metrics)))
+        csv_writer.writerow(
+            [COLUMN_NAME_FRAME_NUMBER, COLUMN_NAME_TIMECODE] + metric_keys)
+        frame_keys = sorted(self._frame_metrics.keys())
+        logger.info("Writing %d frames to CSV...", len(frame_keys))
+        for frame_key in frame_keys:
+            frame_timecode = base_timecode + frame_key
+            csv_writer.writerow(
+                [frame_timecode.get_frames(), frame_timecode.get_timecode()] +
+                [str(metric) for metric in self.get_metrics(frame_key, metric_keys)])
+
 
     @staticmethod
-    def valid_header(row):
+    def valid_header(row: List[str]):
         # type: (List[str]) -> bool
         """ Validates if the given CSV row is a valid header for a statsfile.
 
@@ -249,13 +265,11 @@ class StatsManager(object):
             return False
         return True
 
-    def load_from_csv(self, path=None, file=None, reset_save_required=True):
-        # type: (Union[File [r], str], Optional[bool] -> int
+    def load_from_csv(self, path: str=None, file: TextIO=None):
         """ Load From CSV: Loads all metrics stored in a CSV file into the StatsManager instance.
 
         Arguments:
             csv_file: A file handle opened in read mode (e.g. open('...', 'r')) or a path as str.
-            reset_save_required: If True, clears the flag indicating that a save is required.
 
         Returns:
             int or None: Number of frames/rows read from the CSV file, or None if the
@@ -272,8 +286,8 @@ class StatsManager(object):
         if path is not None:
             if os.path.exists(path):
                 with open(path, 'r') as file:
-                    return self.load_from_csv(file=file, reset_save_required=reset_save_required)
-
+                    return self.load_from_csv(file=file)
+            return
         csv_reader = get_csv_reader(file)
         num_cols = None
         num_metrics = None
@@ -309,8 +323,7 @@ class StatsManager(object):
             self.set_metrics(int(row[0]), metric_dict)
             num_frames += 1
         logger.info('Loaded %d metrics for %d frames.', num_metrics, num_frames)
-        if reset_save_required:
-            self._metrics_updated = False
+        self._metrics_updated = False
         return num_frames
 
 
