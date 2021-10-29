@@ -46,8 +46,8 @@ detectors being used, speeding up subsequent scene detection runs using the same
 """
 
 # Standard Library Imports
-from __future__ import print_function
 import logging
+import os.path
 
 # PySceneDetect Library Imports
 from scenedetect.platform import get_csv_reader
@@ -97,22 +97,6 @@ class StatsFileCorrupt(Exception):
         # type: (str, str)
         # Pass message string to base Exception class.
         super(StatsFileCorrupt, self).__init__(message)
-
-
-class NoMetricsRegistered(Exception):
-    """ Raised when attempting to save a CSV file via save_to_csv(...) without any
-    frame metrics having been registered (i.e. no SceneDetector objects were added
-    to the owning SceneManager object, if any). """
-    # pylint: disable=unnecessary-pass
-    pass
-
-
-class NoMetricsSet(Exception):
-    """ Raised if no frame metrics have been set via set_metrics(...) when attempting
-    to save the stats to a CSV file via save_to_csv(...). This may also indicate that
-    detect_scenes(...) was not called on the owning SceneManager object, if any. """
-    # pylint: disable=unnecessary-pass
-    pass
 
 
 ##
@@ -211,7 +195,7 @@ class StatsManager(object):
         """
         return self._metrics_updated
 
-
+    # TODO(v1.0): Remove csv_file, add path=None, file=None.
     def save_to_csv(self, csv_file, base_timecode, force_save=True):
         # type: (File [w], FrameTimecode, bool) -> None
         """ Save To CSV: Saves all frame metrics stored in the StatsManager to a CSV file.
@@ -224,16 +208,11 @@ class StatsManager(object):
 
                 TODO(v1.0): Remove this.
 
-            force_save: If True, forcably writes metrics out even if there are no
-                registered metrics or frame statistics. If False, a NoMetricsRegistered
-                will be thrown if there are no registered metrics, and a NoMetricsSet
-                exception will be thrown if is_save_required() returns False.
+            force_save: If True, forcably writes metrics out even if one is not required
+                (see `is_save_required`).
 
         Raises:
-            NoMetricsRegistered: No frame metrics have been registered to save,
-                nor is there any frame data to save.
-            NoMetricsSet: No frame metrics have been entered/updated, thus there
-                is no frame data to save.
+            IOError: If fail to open file for writing.
         """
         csv_writer = get_csv_writer(csv_file)
         # Ensure we need to write to the file, and that we have data to do so with.
@@ -251,10 +230,7 @@ class StatsManager(object):
                     [frame_timecode.get_frames(), frame_timecode.get_timecode()] +
                     [str(metric) for metric in self.get_metrics(frame_key, metric_keys)])
         else:
-            if not self._registered_metrics:
-                raise NoMetricsRegistered()
-            if not self._frame_metrics:
-                raise NoMetricsSet()
+            logger.info("No metrics to save.")
 
     @staticmethod
     def valid_header(row):
@@ -273,23 +249,32 @@ class StatsManager(object):
             return False
         return True
 
-    def load_from_csv(self, csv_file, reset_save_required=True):
-        # type: (File [r], Optional[bool] -> int
+    def load_from_csv(self, path=None, file=None, reset_save_required=True):
+        # type: (Union[File [r], str], Optional[bool] -> int
         """ Load From CSV: Loads all metrics stored in a CSV file into the StatsManager instance.
 
         Arguments:
-            csv_file: A file handle opened in read mode (e.g. open('...', 'r')).
+            csv_file: A file handle opened in read mode (e.g. open('...', 'r')) or a path as str.
             reset_save_required: If True, clears the flag indicating that a save is required.
 
         Returns:
             int or None: Number of frames/rows read from the CSV file, or None if the
-            input file was blank.
+            input file was blank or could not be found.
 
         Raises:
             StatsFileCorrupt: Stats file is corrupt and can't be loaded, or wrong file
                 was specified.
         """
-        csv_reader = get_csv_reader(csv_file)
+        if path is not None and file is not None:
+            raise ValueError("Only one of path or file can be specified")
+        # If we get a path instead of an open file handle, check that it exists, and if so,
+        # recursively call ourselves again but with file set instead of path.
+        if path is not None:
+            if os.path.exists(path):
+                with open(path, 'r') as file:
+                    return self.load_from_csv(file=file, reset_save_required=reset_save_required)
+
+        csv_reader = get_csv_reader(file)
         num_cols = None
         num_metrics = None
         num_frames = None

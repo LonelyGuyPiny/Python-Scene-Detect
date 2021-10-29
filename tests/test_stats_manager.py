@@ -69,14 +69,10 @@ from scenedetect.stats_manager import StatsFileCorrupt
 from scenedetect.stats_manager import COLUMN_NAME_FRAME_NUMBER
 from scenedetect.stats_manager import COLUMN_NAME_TIMECODE
 
-# TODO(1.0): The following exceptions still require test cases:
+# TODO(1.0): The following exception still requires a test case:
 from scenedetect.stats_manager import FrameMetricNotRegistered
-from scenedetect.stats_manager import NoMetricsRegistered
-from scenedetect.stats_manager import NoMetricsSet
 
-
-# TODO: Replace TEST_STATS_FILES with a @pytest.fixture called generate_stats_file.
-#       It should generate the path to a random stats file for use in a test case.
+# TODO(v1.0): use https://docs.pytest.org/en/6.2.x/tmpdir.html
 TEST_STATS_FILES = ['TEST_STATS_FILE'] * 4
 TEST_STATS_FILES = ['%s_%012d.csv' % (stats_file, random.randint(0, 10**12))
                     for stats_file in TEST_STATS_FILES]
@@ -156,16 +152,9 @@ def test_detector_metrics(test_video_file):
 
 def test_load_empty_stats():
     """ Test loading an empty stats file, ensuring it results in no errors. """
-
     open(TEST_STATS_FILES[0], 'w').close()
-
-    with open(TEST_STATS_FILES[0], 'r') as stats_file:
-
-        stats_manager = StatsManager()
-
-        stats_reader = get_csv_reader(stats_file)
-        stats_manager.load_from_csv(stats_reader)
-
+    stats_manager = StatsManager()
+    stats_manager.load_from_csv(TEST_STATS_FILES[0])
 
 
 def test_load_hardcoded_file():
@@ -190,8 +179,7 @@ def test_load_hardcoded_file():
 
         stats_file.close()
 
-        stats_file = open(TEST_STATS_FILES[0], 'r')
-        stats_manager.load_from_csv(csv_file=stats_file)
+        stats_manager.load_from_csv(TEST_STATS_FILES[0])
 
         # Check that we decoded the correct values.
         assert stats_manager.metrics_exist(some_frame_key, [some_metric_key])
@@ -226,8 +214,7 @@ def test_load_hardcoded_file_backwards_compat():
 
         stats_file.close()
 
-        stats_file = open(TEST_STATS_FILES[0], 'r')
-        stats_manager.load_from_csv(csv_file=stats_file)
+        stats_manager.load_from_csv(TEST_STATS_FILES[0])
 
         # Check that we decoded the correct values.
         assert stats_manager.metrics_exist(some_frame_key, [some_metric_key])
@@ -251,15 +238,14 @@ def test_save_load_from_video(test_video_file):
     duration = FrameTimecode('00:00:20', video_fps)
 
     scene_manager.auto_downscale = True
-    scene_manager.detect_scenes(video=video, duration=duration)
+    scene_manager.detect_scenes(video, duration=duration)
 
     with open(TEST_STATS_FILES[0], 'w') as stats_file:
         stats_manager.save_to_csv(stats_file, base_timecode)
 
     stats_manager_new = StatsManager()
 
-    with open(TEST_STATS_FILES[0], 'r') as stats_file:
-        stats_manager_new.load_from_csv(stats_file)
+    stats_manager_new.load_from_csv(TEST_STATS_FILES[0])
 
     # Choose the first available frame key and compare all metrics in both.
     frame_key = min(stats_manager._frame_metrics.keys())

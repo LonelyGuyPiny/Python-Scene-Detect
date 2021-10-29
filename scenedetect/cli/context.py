@@ -82,6 +82,7 @@ def parse_timecode(value: Union[str, int, FrameTimecode], frame_rate: float) -> 
     try:
         return FrameTimecode(timecode=value, fps=frame_rate)
     except (ValueError, TypeError):
+        #pylint: disable=raise-missing-from
         raise click.BadParameter(
             'timecode must be in frames (1234), seconds (123.4s), or HH:MM:SS (00:02:03.400)')
 

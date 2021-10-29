@@ -41,9 +41,6 @@ For OpenCV 2.x, the scenedetect.platform module also makes a copy of the
 OpenCV VideoCapture property constants from the cv2.cv namespace directly
 to the cv2 namespace.  This ensures that the cv2 API is consistent
 with those changes made to it in OpenCV 3.0 and above.
-
-This module also includes an alias for the unicode/string types in Python 2/3
-as STRING_TYPE intended to help with parsing string types from the CLI parser.
 """
 
 # Standard Library Imports
@@ -77,20 +74,6 @@ except ModuleNotFoundError:
     tqdm = None
 # pylint: enable=unused-import
 # pylint: enable=invalid-name
-
-
-##
-## click/Command-Line Interface String Type
-##
-
-# String type (used to allow FrameTimecode object to take both unicode and native
-# string objects when being constructed via scenedetect.platform.STRING_TYPE).
-# pylint: disable=invalid-name, undefined-variable
-if sys.version_info[0] == 2:
-    STRING_TYPE = unicode
-else:
-    STRING_TYPE = str
-# pylint: enable=invalid-name, undefined-variable
 
 
 # Compatibility fix for OpenCV v2.x (copies CAP_PROP_* properties from the
@@ -328,5 +311,5 @@ def invoke_command(args):
         # Error 87:  The parameter is incorrect
         to_match = ('206', '87')
         if any([x in exception_string for x in to_match]):
-            raise CommandTooLong()
+            raise CommandTooLong() from err
         raise

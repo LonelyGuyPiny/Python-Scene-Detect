@@ -67,11 +67,7 @@ def test_api(test_video_file):
     scene_manager.add_detector(ContentDetector())
     base_timecode = video.base_timecode
 
-    # If stats file exists, load it.
-    if os.path.exists(STATS_FILE_PATH):
-        # Read stats from CSV file opened in read mode:
-        with open(STATS_FILE_PATH, 'r') as stats_file:
-            stats_manager.load_from_csv(stats_file)
+    stats_manager.load_from_csv(STATS_FILE_PATH)
 
     start_time = base_timecode + 20     # 00:00:00.667
     end_time = base_timecode + 20.0     # 00:00:20.000

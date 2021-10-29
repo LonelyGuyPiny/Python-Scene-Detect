@@ -8,21 +8,23 @@ PySceneDetect Releases
 
 #### Release Notes
 
- * First major API update and internal with significant changes from v0.5.x
+ * Support for Python 2.7 has been dropped, new minimum Python version is 3.6
+ * First major API update and internal with significant changes from v0.5.x, feedback on the new design is welcome
+ * Due to the significant amount of API changes, it is recommended to look at the updated quickstart & API examples in the manual
  * Adds support for multiple video backends to improve both performance and accuracy
  * Frame numbers now start from 1 instead of 0 to match most other tools/libraries (e.g. `ffmpeg`), although `FrameTimecode` is still 0-based (this is corrected transparently)
 
 #### Changelog
 
  * [general] Frame numbers now start from 1 instead of 0
-
-
+ * [general] Drop Python 2.7 support, new minimum version is 3.6
  * [api] New `VideoStream` object replaces `VideoManager` and supports both OpenCV and PyAV backends
     * Improves video seeking invariants, especially around defining what frames 0 and 1 mean
     * FrameTimecode objects still are 0-based (e.g. frame #0 is PTS 0), but the `VideoStream.frame_number` property is 1-based
-    * See `test_time_invariants` in `tests/test_video_stream.py` (TODO: ADD LINK) as a reference for specific behaviours
- * [api] `save_images()` no longer accepts downscale_factor since there is already the ability to downscale images
+    * See `test_time_invariants` in `tests/test_video_stream.py` as a reference for specific behaviours, and a test video detailing visually what is expected. TODO(v1.0): Add links to both test_time_invariants and the test video)
+ * [api] `save_images()` no longer accepts downscale_factor, since there is already the ability to resize images via the `scale` or `height`/`width` arguments
  * [api] Responsibility for frame downscaling has been moved to `SceneManager`
+ * [api] The `StatsManager` load/save methods now accept a path or an open file handle
 
 
 ## PySceneDetect 0.5

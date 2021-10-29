@@ -37,9 +37,6 @@ Unit tests for the FrameTimecode object can be found in `tests/test_timecode.py`
 # Standard Library Imports
 import math
 
-# PySceneDetect Library Imports
-from scenedetect.platform import STRING_TYPE
-
 
 MINIMUM_FRAMES_PER_SECOND_FLOAT = 1.0 / 1000.0
 MINIMUM_FRAMES_PER_SECOND_DELTA_FLOAT = 1.0 / 100000
@@ -109,7 +106,7 @@ class FrameTimecode(object):
             self.framerate = float(fps)
 
         # Process the timecode value, storing it as an exact number of frames.
-        if isinstance(timecode, (str, STRING_TYPE)):
+        if isinstance(timecode, str):
             self.frame_num = self._parse_timecode_string(timecode)
         else:
             self.frame_num = self._parse_timecode_number(timecode)
