@@ -464,7 +464,6 @@ def detect_adaptive_command(ctx, threshold, min_scene_len, min_delta_hsv,
     # Need to ensure that a detector is not added twice, or will cause
     # a frame metric key error when registering the detector.
     ctx.obj.add_detector(scenedetect.detectors.AdaptiveDetector(
-        video_manager=ctx.obj.video_manager,
         adaptive_threshold=threshold,
         min_scene_len=min_scene_len,
         min_delta_hsv=min_delta_hsv,

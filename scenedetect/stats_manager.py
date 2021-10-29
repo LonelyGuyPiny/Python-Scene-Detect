@@ -46,7 +46,7 @@ detectors being used, speeding up subsequent scene detection runs using the same
 """
 
 # Standard Library Imports
-import logging
+from logging import getLogger
 from typing import List, TextIO
 import os.path
 from scenedetect.frame_timecode import FrameTimecode
@@ -55,9 +55,7 @@ from scenedetect.frame_timecode import FrameTimecode
 from scenedetect.platform import get_csv_reader
 from scenedetect.platform import get_csv_writer
 
-# pylint: disable=useless-super-delegation
-
-logger = logging.getLogger('pyscenedetect')
+logger = getLogger('pyscenedetect')
 
 ##
 ## StatsManager CSV File Column Names (Header Row)
@@ -74,31 +72,27 @@ COLUMN_NAME_TIMECODE = "Timecode"
 class FrameMetricRegistered(Exception):
     """ Raised when attempting to register a frame metric key which has
     already been registered. """
-    def __init__(self, metric_key, message="Attempted to re-register frame metric key."):
-        # type: (str, str)
+    def __init__(self, metric_key: str, message: str="Attempted to re-register frame metric key."):
         # Pass message string to base Exception class.
-        super(FrameMetricRegistered, self).__init__(message)
+        super().__init__(message)
         self.metric_key = metric_key
 
 
 class FrameMetricNotRegistered(Exception):
     """ Raised when attempting to call get_metrics(...)/set_metrics(...) with a
     frame metric that does not exist, or has not been registered. """
-    def __init__(self, metric_key, message=
-                 "Attempted to get/set frame metrics for unregistered metric key."):
-        # type: (str, str)
+    def __init__(self, metric_key: str,
+                 message: str="Attempted to get/set frame metrics for unregistered metric key."):
         # Pass message string to base Exception class.
-        super(FrameMetricNotRegistered, self).__init__(message)
+        super().__init__(message)
         self.metric_key = metric_key
 
 
 class StatsFileCorrupt(Exception):
     """ Raised when frame metrics/stats could not be loaded from a provided CSV file. """
-    def __init__(self, message=
-                 "Could not load frame metric data data from passed CSV file."):
-        # type: (str, str)
+    def __init__(self, message: str="Could not load frame metric data data from passed CSV file."):
         # Pass message string to base Exception class.
-        super(StatsFileCorrupt, self).__init__(message)
+        super().__init__(message)
 
 
 ##
@@ -319,7 +313,7 @@ class StatsManager(object):
                     try:
                         metric_dict[self._loaded_metrics[i]] = float(metric_str)
                     except ValueError:
-                        raise StatsFileCorrupt('Corrupted value in stats file: %s' % metric_str)
+                        raise StatsFileCorrupt('Corrupted value in stats file: %s' % metric_str) from ValueError
             self.set_metrics(int(row[0]), metric_dict)
             num_frames += 1
         logger.info('Loaded %d metrics for %d frames.', num_metrics, num_frames)

@@ -388,7 +388,8 @@ class CliContext(object):
 
     def _open_stats_file(self, file_path: str):
         """Initializes this object's StatsManager, loading any existing stats from disk.
-        If the given file does not already exist, it is created here."""
+        If the file does not already exist, all directories leading up to it's eventual location
+        will be created here."""
         self.stats_file_path = get_and_create_path(file_path, self.output_directory)
         self.stats_manager = StatsManager()
 

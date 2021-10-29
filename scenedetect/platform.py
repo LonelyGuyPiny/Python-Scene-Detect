@@ -44,8 +44,6 @@ with those changes made to it in OpenCV 3.0 and above.
 """
 
 # Standard Library Imports
-from __future__ import print_function
-
 import csv
 import logging
 import os
@@ -55,7 +53,7 @@ import struct
 import subprocess
 import sys
 
-from typing import Optional
+from typing import List, Optional
 
 # Third-Party Library Imports
 import cv2
@@ -76,6 +74,7 @@ except ModuleNotFoundError:
 # pylint: enable=invalid-name
 
 
+# TODO(v1.0): Do we still need this?
 # Compatibility fix for OpenCV v2.x (copies CAP_PROP_* properties from the
 # cv2.cv namespace to the cv2 namespace, as the cv2.cv namespace was removed
 # with the release of OpenCV 3.0).
@@ -91,8 +90,7 @@ if not 'CAP_PROP_FPS' in dir(cv2):
     cv2.INTER_CUBIC = cv2.cv.INTER_CUBIC
 # pylint: enable=no-member
 
-def get_aspect_ratio(cap, epsilon=0.01):
-    # type: (cv2.VideoCapture, float) -> float
+def get_aspect_ratio(cap: cv2.VideoCapture, epsilon: float=0.01) -> float:
     """ Compatibility fix for OpenCV < v3.4.1 to get the aspect ratio
     of a video. For older versions, this function always returns 1.0.
 
@@ -202,7 +200,6 @@ def get_csv_writer(file_handle):
 ##
 
 def get_and_create_path(file_path: str, output_directory: Optional[str]=None):
-    # type: (str, Optional[str]) -> str
     """ Get & Create Path: Gets and returns the full/absolute path to file_path
     in the specified output_directory if set, creating any required directories
     along the way.
@@ -284,7 +281,7 @@ class CommandTooLong(Exception):
     # pylint: disable=unnecessary-pass
     pass
 
-def invoke_command(args):
+def invoke_command(args: List[str]) -> int:
     # type: (List[str]) -> None
     """ Same as calling Python's subprocess.call() method, but explicitly
     raises a different exception when the command length is too long.
