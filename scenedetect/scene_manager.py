@@ -475,20 +475,28 @@ class SceneManager(object):
     """
 
     def __init__(self, stats_manager: Optional[StatsManager] = None):
-        """TODO(v1.0):
-        This class should own a StatsManager instead of taking an optional one. Change
-        to store_stats (default False) and expose a new .stats_manager @property.
+        """TODO(v1.0): This class should own a StatsManager instead of taking an optional one.
+        Change `stats_manager` to to `store_stats: bool=False, and expose a new
+        `stats_manager` @property. from the SceneManager.
         """
         self._cutting_list: List[FrameTimecode] = []
         self._event_list: List[Tuple[FrameTimecode]] = []
         self._detector_list: List[SceneDetector] = []
+        # TODO(v1.0): Remove.
         self._sparse_detector_list: List[SparseSceneDetector] = []
+
         self._stats_manager: Optional[StatsManager] = stats_manager
+
         self._num_frames = 0
         self._start_frame = 0
         self._base_timecode: Optional[FrameTimecode] = None
         self._downscale: int = 1
         self._auto_downscale: bool = False
+
+    @property
+    def stats_manager(self) -> Optional[StatsManager]:
+        """Getter for the StatsManager associated with this SceneManager, if any."""
+        return self._stats_manager
 
     @property
     def downscale(self) -> int:
@@ -529,19 +537,19 @@ class SceneManager(object):
         Arguments:
             detector (SceneDetector): Scene detector to add to the SceneManager.
         """
-        if self._stats_manager is None and detector.stats_manager_required():
+        if self.stats_manager is None and detector.stats_manager_required():
             # Make sure the lists are empty so that the detectors don't get
             # out of sync (require an explicit statsmanager instead)
             assert not self._detector_list and not self._sparse_detector_list
             self._stats_manager = StatsManager()
 
-        detector.stats_manager = self._stats_manager
-        if self._stats_manager is not None:
+        detector.stats_manager = self.stats_manager
+        if self.stats_manager is not None:
             # Allow multiple detection algorithms of the same type to be added
             # by suppressing any FrameMetricRegistered exceptions due to attempts
             # to re-register the same frame metric keys.
             try:
-                self._stats_manager.register_metrics(detector.get_metrics())
+                self.stats_manager.register_metrics(detector.get_metrics())
             except FrameMetricRegistered:
                 pass
 
@@ -698,7 +706,7 @@ class SceneManager(object):
                 was constructed with a StatsManager object.
         """
 
-        if frame_skip > 0 and self._stats_manager is not None:
+        if frame_skip > 0 and self.stats_manager is not None:
             raise ValueError('frame_skip must be 0 when using a StatsManager.')
         if duration is not None and end_time is not None:
             raise ValueError('duration and end_time cannot be set at the same time!')
