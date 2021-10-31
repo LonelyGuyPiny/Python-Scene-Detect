@@ -153,8 +153,8 @@ def split_video_mkvmerge(input_video_path: str,
         output_file_template: Template to use for output files. Note that the scene number is
             appended to the prefix by mkvmerge. Can use $VIDEO_NAME as a template parameter
             (e.g. "$VIDEO_NAME-Scene").
-        video_name (str): Name of the video to be substituted in output_file_template for $VIDEO_NAME.
-            If not specified, will be obtained from the filename.
+        video_name (str): Name of the video to be substituted in output_file_template for
+            $VIDEO_NAME. If not specified, will be obtained from the filename.
         suppress_output (bool): If True, adds the --quiet flag when invoking `mkvmerge`.
 
     Returns:
@@ -182,16 +182,11 @@ def split_video_mkvmerge(input_video_path: str,
         if suppress_output:
             call_list.append('--quiet')
         call_list += [
-            '-o',
-            output_file_name,
-            '--split',
-        #'timecodes:%s' % ','.join(
-        #    [start_time.get_timecode() for start_time, _ in scene_list[1:]]),
+            '-o', output_file_name, '--split',
             'parts:%s' % ','.join([
                 '%s-%s' % (start_time.get_timecode(), end_time.get_timecode())
                 for start_time, end_time in scene_list
-            ]),
-            input_video_path
+            ]), input_video_path
         ]
         total_frames = scene_list[-1][1].get_frames() - scene_list[0][0].get_frames()
         processing_start_time = time.time()

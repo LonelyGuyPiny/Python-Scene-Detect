@@ -86,9 +86,11 @@ def test_cli_detectors(detector_command: str):
 def test_cli_time():
     # TODO: Add test for timecode formats.
     base_command = '-i {VIDEO} time {TIME} {DETECTOR}'
+
     # Test setting start, end, and duration.
     assert invoke_scenedetect(base_command, TIME='-s 2s -e 8s') == 0    # start/end
     assert invoke_scenedetect(base_command, TIME='-s 2s -d 6s') == 0    # start/duration
+
     # Ensure cannot set end and duration at the same time.
     assert invoke_scenedetect(base_command, TIME='-s 2s -d 6s -e 8s') != 0
     assert invoke_scenedetect(base_command, TIME='-s 2s -e 8s -d 6s ') != 0
@@ -113,7 +115,6 @@ def test_cli_save_images():
     # TODO: Check for existence of images, remove after.
 
 
-@pytest.mark.xfail(reason="TODO(v1.0): Command not functional yet.")
 def test_cli_export_html():
     base_command = '-i {VIDEO} -s {STATS} time {TIME} {DETECTOR} {COMMAND}'
     assert invoke_scenedetect(base_command, COMMAND='save-images export-html') == 0

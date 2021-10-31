@@ -23,7 +23,6 @@
 # ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-
 """ ``scenedetect.cli.context`` Module
 
 This file contains the implementation of the PySceneDetect command-line
@@ -70,6 +69,7 @@ from scenedetect.frame_timecode import FrameTimecode, MINIMUM_FRAMES_PER_SECOND_
 from scenedetect.video_stream import VideoOpenFailure
 from scenedetect.backends.opencv import VideoStreamCv2
 
+
 def parse_timecode(value: Union[str, int, FrameTimecode], frame_rate: float) -> FrameTimecode:
     """Parses a user input string into a FrameTimecode assuming the given framerate.
 
@@ -78,7 +78,8 @@ def parse_timecode(value: Union[str, int, FrameTimecode], frame_rate: float) -> 
     Raises:
         click.BadParameter
      """
-    if value is None: return None
+    if value is None:
+        return None
     try:
         return FrameTimecode(timecode=value, fps=frame_rate)
     except (ValueError, TypeError):
@@ -107,17 +108,15 @@ def check_split_video_requirements(use_mkvmerge: bool) -> None:
         error_strs = [
             "{EXTERN_TOOL} is required for split-video{EXTRA_ARGS}.".format(
                 EXTERN_TOOL='mkvmerge' if use_mkvmerge else 'ffmpeg',
-                EXTRA_ARGS=' -c/--copy' if use_mkvmerge else '')]
+                EXTRA_ARGS=' -c/--copy' if use_mkvmerge else '')
+        ]
         error_strs += ["Install one of the above tools to enable the split-video command."]
         if not use_mkvmerge and is_mkvmerge_available():
-            error_strs += [
-                'You can also specify `-c/--copy` to use mkvmerge for splitting.']
+            error_strs += ['You can also specify `-c/--copy` to use mkvmerge for splitting.']
         elif use_mkvmerge and is_ffmpeg_available():
-            error_strs += [
-                'You can also omit `-c/--copy` to use ffmpeg for splitting.']
+            error_strs += ['You can also omit `-c/--copy` to use ffmpeg for splitting.']
         error_str = '\n'.join(error_strs)
         raise click.BadParameter(error_str, param_hint='split-video')
-
 
 
 class CliContext(object):
@@ -133,8 +132,8 @@ class CliContext(object):
 
     def __init__(self):
         self.logger = logging.getLogger('pyscenedetect')
-        self.options_processed: bool = False    # True when CLI option parsing is complete.
-        self.process_input_flag: bool = True    # If False, skips video processing.
+        self.options_processed: bool = False # True when CLI option parsing is complete.
+        self.process_input_flag: bool = True # If False, skips video processing.
 
         self.video_stream: VideoStream = None
         self.base_timecode: FrameTimecode = None
@@ -142,60 +141,60 @@ class CliContext(object):
         self.stats_manager: StatsManager = None
 
         # Main `scenedetect` Options
-        self.output_directory: str = None           # -o/--output
-        self.quiet_mode: bool = False               # -q/--quiet or -v/--verbosity quiet
-        self.stats_file_path: str = None            # -s/--stats
-        self.drop_short_scenes: bool = False        # --drop-short-scenes
-        self.min_scene_len: FrameTimecode = None    # -m/--min-scene-len
-        self.frame_skip: int = 0                    # -fs/--frame-skip
+        self.output_directory: str = None        # -o/--output
+        self.quiet_mode: bool = False            # -q/--quiet or -v/--verbosity quiet
+        self.stats_file_path: str = None         # -s/--stats
+        self.drop_short_scenes: bool = False     # --drop-short-scenes
+        self.min_scene_len: FrameTimecode = None # -m/--min-scene-len
+        self.frame_skip: int = 0                 # -fs/--frame-skip
 
         # `time` Command Options
         self.time: bool = False
-        self.start_time: FrameTimecode = None       # time -s/--start
-        self.end_time: FrameTimecode = None         # time -e/--end
-        self.duration: FrameTimecode = None         # time -d/--duration
+        self.start_time: FrameTimecode = None # time -s/--start
+        self.end_time: FrameTimecode = None   # time -e/--end
+        self.duration: FrameTimecode = None   # time -d/--duration
 
         # `save-images` Command Options
         self.save_images: bool = False
-        self.image_extension: str = 'jpg'           # save-images -j/--jpeg, -w/--webp, -p/--png
-        self.image_directory: str = None            # save-images -o/--output
-        self.image_param: int = None                # save-images -q/--quality if -j/-w,
-                                                    #   otherwise -c/--compression if -p
-        # save-images -f/--name-format
+        self.image_extension: str = 'jpg' # save-images -j/--jpeg, -w/--webp, -p/--png
+        self.image_directory: str = None  # save-images -o/--output
+        self.image_param: int = None      # save-images -q/--quality if -j/-w,
+                                          #   otherwise -c/--compression if -p
+                                          # save-images -f/--name-format
         self.image_name_format: str = '$VIDEO_NAME-Scene-$SCENE_NUMBER-$IMAGE_NUMBER'
-        self.num_images: int = 3                    # save-images -n/--num-images
-        self.frame_margin: int = 1                  # save-images -m/--frame-margin
-        self.scale: float = None                    # save-images -s/--scale
-        self.height: int = None                     # save-images -h/--height
-        self.width: int = None                      # save-images -w/--width
+        self.num_images: int = 3          # save-images -n/--num-images
+        self.frame_margin: int = 1        # save-images -m/--frame-margin
+        self.scale: float = None          # save-images -s/--scale
+        self.height: int = None           # save-images -h/--height
+        self.width: int = None            # save-images -w/--width
 
         # `split-video` Command Options
         self.split_video: bool = False
-        self.split_mkvmerge: bool = False           # split-video -c/--copy
-        self.split_args: str = None                 # split-video -a/--override-args
-        self.split_directory: str = None            # split-video -o/--output
-        # split-video -f/--filename
+        self.split_mkvmerge: bool = False # split-video -c/--copy
+        self.split_args: str = None       # split-video -a/--override-args
+        self.split_directory: str = None  # split-video -o/--output
+                                          # split-video -f/--filename
         self.split_name_format: str = '$VIDEO_NAME-Scene-$SCENE_NUMBER'
-        self.split_quiet: bool = False              # split-video -q/--quiet
+        self.split_quiet: bool = False    # split-video -q/--quiet
 
         # `list-scenes` Command Options
         self.list_scenes: bool = False
-        self.print_scene_list: bool = False         # list-scenes -q/--quiet
-        self.scene_list_directory: str = None       # list-scenes -o/--output
-        self.scene_list_name_format: str = None     # list-scenes -f/--filename
-        self.scene_list_output: bool = False        # list-scenes -n/--no-output
-        self.skip_cuts: bool = False                # list-scenes -s/--skip-cuts
+        self.print_scene_list: bool = False     # list-scenes -q/--quiet
+        self.scene_list_directory: str = None   # list-scenes -o/--output
+        self.scene_list_name_format: str = None # list-scenes -f/--filename
+        self.scene_list_output: bool = False    # list-scenes -n/--no-output
+        self.skip_cuts: bool = False            # list-scenes -s/--skip-cuts
 
         # `export-html` Command Options
         self.export_html: bool = False
-        self.html_name_format: str = None           # export-html -f/--filename
-        self.html_include_images: bool = True       # export-html --no-images
-        self.image_width: int = None                # export-html -w/--image-width
-        self.image_height: int = None               # export-html -h/--image-height
+        self.html_name_format: str = None     # export-html -f/--filename
+        self.html_include_images: bool = True # export-html --no-images
+        self.image_width: int = None          # export-html -w/--image-width
+        self.image_height: int = None         # export-html -h/--image-height
 
-
-    def parse_options(self, input_path: str, framerate: float, stats_file: Optional[str], downscale: Optional[int], frame_skip: int,
-                      min_scene_len: int, drop_short_scenes: bool):
+    def parse_options(self, input_path: str, framerate: float, stats_file: Optional[str],
+                      downscale: Optional[int], frame_skip: int, min_scene_len: int,
+                      drop_short_scenes: bool):
         """ Parse Options: Parses all global options/arguments passed to the main
         scenedetect command, before other sub-commands (e.g. this function processes
         the [options] when calling scenedetect [options] [commands [command options]].
@@ -233,8 +232,6 @@ class CliContext(object):
                 self.logger.debug(str(ex))
                 raise click.BadParameter(str(ex), param_hint='downscale factor')
 
-
-
     def process_input(self):
         # type: () -> None
         """ Process Input: Processes input video(s) and generates output as per CLI commands.
@@ -271,10 +268,13 @@ class CliContext(object):
         if self.start_time is not None:
             self.video_stream.seek(target=self.start_time)
         num_frames = self.scene_manager.detect_scenes(
-            video=self.video_stream, duration=self.duration, end_time=self.end_time,
-            frame_skip=self.frame_skip, show_progress=not self.quiet_mode)
+            video=self.video_stream,
+            duration=self.duration,
+            end_time=self.end_time,
+            frame_skip=self.frame_skip,
+            show_progress=not self.quiet_mode)
 
-        # Handle case where video fails with multiple audio tracks (#179).
+        # Handle case where video failure is most likely due to multiple audio tracks (#179).
         # TODO(#213): Using PyAV as a backend should resolve this issue.  When available,
         # update the error message below accordingly.
         if num_frames <= 0:
@@ -289,29 +289,28 @@ class CliContext(object):
             return
 
         perf_duration = time.time() - perf_start_time
-        self.logger.info('Processed %d frames in %.1f seconds (average %.2f FPS).',
-                     num_frames, perf_duration, float(num_frames)/perf_duration)
+        self.logger.info('Processed %d frames in %.1f seconds (average %.2f FPS).', num_frames,
+                         perf_duration,
+                         float(num_frames) / perf_duration)
 
         # Handle -s/--stats option.
         self._save_stats()
 
-        # Get list of detected cuts and scenes from the SceneManager to generate the required output
-        # files with based on the given commands (list-scenes, split-video, save-images, etc...).
+        # Get list of detected cuts/scenes from the SceneManager to generate the required output
+        # files, based on the given commands (list-scenes, split-video, save-images, etc...).
         cut_list = self.scene_manager.get_cut_list()
         scene_list = self.scene_manager.get_scene_list()
 
         # Handle --drop-short-scenes.
         if self.drop_short_scenes and self.min_scene_len > 0:
-            scene_list = [
-                s for s in scene_list
-                if (s[1] - s[0]) >= self.min_scene_len
-            ]
+            scene_list = [s for s in scene_list if (s[1] - s[0]) >= self.min_scene_len]
 
-        if scene_list:  # Ensure we don't divide by zero.
-            self.logger.info('Detected %d scenes, average shot length %.1f seconds.',
-                         len(scene_list),
-                         sum([(end_time - start_time).get_seconds()
-                              for start_time, end_time in scene_list]) / float(len(scene_list)))
+        # Ensure we don't divide by zero.
+        if scene_list:
+            self.logger.info(
+                'Detected %d scenes, average shot length %.1f seconds.', len(scene_list),
+                sum([(end_time - start_time).get_seconds() for start_time, end_time in scene_list])
+                / float(len(scene_list)))
         else:
             self.logger.info('No scenes detected.')
 
@@ -327,7 +326,6 @@ class CliContext(object):
         # Handle split-video command.
         self._split_video(scene_list)
 
-
     def check_input_open(self):
         # type: () -> None
         """ Check Input Open: Ensures that the CliContext's VideoManager was initialized,
@@ -341,7 +339,6 @@ class CliContext(object):
             self.logger.error("-i/--input [VIDEO] must be specified before any commands.")
             raise click.BadParameter('No input specified.', param_hint='input video')
 
-
     def add_detector(self, detector):
         """ Add Detector: Adds a detection algorithm to the CliContext's SceneManager. """
         self.check_input_open()
@@ -350,12 +347,11 @@ class CliContext(object):
         try:
             self.scene_manager.add_detector(detector)
         except scenedetect.stats_manager.FrameMetricRegistered:
-            raise click.BadParameter(message='Cannot specify detection algorithm twice.',
-                                     param_hint=detector.cli_name)
+            raise click.BadParameter(
+                message='Cannot specify detection algorithm twice.', param_hint=detector.cli_name)
         self.options_processed = options_processed_orig
 
-
-    def _init_video_stream(self, input_path: str=None, framerate: float=None):
+    def _init_video_stream(self, input_path: str = None, framerate: float = None):
         self.base_timecode = None
         self.logger.debug('Initializing VideoStreamCv2.')
         try:
@@ -369,22 +365,21 @@ class CliContext(object):
                 self.logger.error(
                     'Error: OpenCV dependency %s not found.'
                     ' Ensure that you installed the Python OpenCV module, and that the'
-                    ' %s file can be found to enable video support.',
-                    dll_name, dll_name)
+                    ' %s file can be found to enable video support.', dll_name, dll_name)
                 # Add additional output message in red.
-                click.echo(click.style(
-                    '\nOpenCV dependency missing, video input/decoding not available.\n', fg='red'))
+                click.echo(
+                    click.style(
+                        '\nOpenCV dependency missing, video input/decoding not available.\n',
+                        fg='red'))
             raise click.BadParameter('Failed to open video!', param_hint='input video')
         except IOError as ex:
             self.logger.error('Input error: %s', str(ex))
             raise click.BadParameter('Input error!', param_hint='input video')
 
         if self.video_stream.frame_rate < MINIMUM_FRAMES_PER_SECOND_FLOAT:
-            self.logger.error(
-                'Failed to obtain framerate for input video.'
-                ' Manually specify framerate with the -f/--framerate option.')
+            self.logger.error('Failed to obtain framerate for input video.'
+                              ' Manually specify framerate with the -f/--framerate option.')
             raise click.BadParameter('Failed to get framerate!', param_hint='input video')
-
 
     def _open_stats_file(self, file_path: str):
         """Initializes this object's StatsManager, loading any existing stats from disk.
@@ -394,7 +389,7 @@ class CliContext(object):
         self.stats_manager = StatsManager()
 
         self.logger.info('Loading frame metrics from stats file: %s',
-                        os.path.basename(self.stats_file_path))
+                         os.path.basename(self.stats_file_path))
         try:
             self.stats_manager.load_from_csv(self.stats_file_path)
         except StatsFileCorrupt:
@@ -403,17 +398,16 @@ class CliContext(object):
                 ' or not a valid PySceneDetect stats file. If the file exists, ensure that'
                 ' it is a valid stats file CSV, otherwise delete it and run PySceneDetect'
                 ' again to re-generate the stats file.')
-            error_strs = [
-                'Could not load stats file.', 'Failed to parse stats file:', error_info ]
+            error_strs = ['Could not load stats file.', 'Failed to parse stats file:', error_info]
             self.logger.error('\n'.join(error_strs))
             # pylint: disable=raise-missing-from
             raise click.BadParameter(
                 '\n  Could not load given stats file, see above output for details.',
                 param_hint='input stats file')
 
-
-    def save_images_command(self, num_images: int, output: Optional[str], name_format: str, jpeg: bool, webp: bool, quality: int,
-                            png: bool, compression: int, frame_margin: int, scale: float, height: int, width: int):
+    def save_images_command(self, num_images: int, output: Optional[str], name_format: str,
+                            jpeg: bool, webp: bool, quality: int, png: bool, compression: int,
+                            frame_margin: int, scale: float, height: int, width: int):
         """ Save Images Command: Parses all options/arguments passed to the save-images command,
         or with respect to the CLI, this function processes [save-images options] when calling:
         scenedetect [global options] save-images [save-images options] [other commands...].
@@ -433,8 +427,8 @@ class CliContext(object):
         num_flags = sum([1 if flag else 0 for flag in [jpeg, webp, png]])
         if num_flags <= 1:
 
-            # Ensure the format exists.
-            extension = 'jpg'   # Default is jpg.
+            # Ensure the format exists (default is JPEG).
+            extension = 'jpg'
             if png:
                 extension = 'png'
             elif webp:
@@ -445,7 +439,8 @@ class CliContext(object):
                     'Image encoder type %s not supported.' % extension.upper(),
                     'The specified encoder type could not be found in the current OpenCV module.',
                     'To enable this output format, please update the installed version of OpenCV.',
-                    'If you build OpenCV, ensure the the proper dependencies are enabled. ']
+                    'If you build OpenCV, ensure the the proper dependencies are enabled. '
+                ]
                 self.logger.debug('\n'.join(error_strs))
                 raise click.BadParameter('\n'.join(error_strs), param_hint='save-images')
 
@@ -468,13 +463,12 @@ class CliContext(object):
             self.logger.info('Image output format set: %s%s', image_type, image_param_type)
             if self.image_directory is not None:
                 self.logger.info('Image output directory set:\n  %s',
-                             os.path.abspath(self.image_directory))
+                                 os.path.abspath(self.image_directory))
             self.options_processed = options_processed_orig
         else:
             self.logger.error('Multiple image type flags set for save-images command.')
             raise click.BadParameter(
                 'Only one image type (JPG/PNG/WEBP) can be specified.', param_hint='save-images')
-
 
     def _save_stats(self) -> None:
         """Handles saving the statsfile if -s/--stats was specified."""
@@ -482,25 +476,23 @@ class CliContext(object):
             # We check if the save is required in order to reduce unnecessary log messages.
             if self.stats_manager.is_save_required():
                 self.logger.info('Saving frame metrics to stats file: %s',
-                                os.path.basename(self.stats_file_path))
+                                 os.path.basename(self.stats_file_path))
                 self.stats_manager.save_to_csv(
                     self.stats_file_path, base_timecode=self.video_stream.base_timecode)
             else:
                 self.logger.debug('No frame metrics updated, skipping update of the stats file.')
 
-
     def _list_scenes(self, scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
                      cut_list: List[FrameTimecode]) -> None:
         """Handles the `list-scenes` command."""
         if self.scene_list_output:
-            scene_list_filename = Template(self.scene_list_name_format).safe_substitute(
-                VIDEO_NAME=self.video_stream.name)
+            scene_list_filename = Template(
+                self.scene_list_name_format).safe_substitute(VIDEO_NAME=self.video_stream.name)
             if not scene_list_filename.lower().endswith('.csv'):
                 scene_list_filename += '.csv'
             scene_list_path = get_and_create_path(
-                scene_list_filename,
-                self.scene_list_directory if self.scene_list_directory is not None
-                else self.output_directory)
+                scene_list_filename, self.scene_list_directory
+                if self.scene_list_directory is not None else self.output_directory)
             self.logger.info('Writing scene list to CSV file:\n  %s', scene_list_path)
             with open(scene_list_path, 'wt') as scene_list_file:
                 write_scene_list(
@@ -510,26 +502,28 @@ class CliContext(object):
                     cut_list=cut_list)
 
         if self.print_scene_list:
-            self.logger.info("""Scene List:
+            self.logger.info(
+                """Scene List:
 -----------------------------------------------------------------------
  | Scene # | Start Frame |  Start Time  |  End Frame  |   End Time   |
 -----------------------------------------------------------------------
 %s
 -----------------------------------------------------------------------
-""", '\n'.join(
-    [' |  %5d  | %11d | %s | %11d | %s |' % (
-        i+1,
-        start_time.get_frames(), start_time.get_timecode(),
-        end_time.get_frames(), end_time.get_timecode())
-     for i, (start_time, end_time) in enumerate(scene_list)]))
+""", '\n'.join([
+                    ' |  %5d  | %11d | %s | %11d | %s |' %
+                    (i + 1, start_time.get_frames(), start_time.get_timecode(),
+                     end_time.get_frames(), end_time.get_timecode())
+                    for i, (start_time, end_time) in enumerate(scene_list)
+                ]))
 
         if cut_list:
             self.logger.info('Comma-separated timecode list:\n  %s',
-                         ','.join([cut.get_timecode() for cut in cut_list]))
+                             ','.join([cut.get_timecode() for cut in cut_list]))
 
     # TODO(v1.0): Test save-images output matches the frames from v0.5.x.
-    def _save_images(self,
-                     scene_list: List[Tuple[FrameTimecode, FrameTimecode]]) -> Optional[Dict[int, List[str]]]:
+    def _save_images(
+            self, scene_list: List[Tuple[FrameTimecode,
+                                         FrameTimecode]]) -> Optional[Dict[int, List[str]]]:
         """Handles the `save-images` command."""
         if not self.save_images:
             return None
@@ -552,27 +546,30 @@ class CliContext(object):
             height=self.height,
             width=self.width)
 
-    def _export_html(self, scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
-                     cut_list: List[FrameTimecode], image_filenames: Optional[Dict[int, List[str]]]) -> None:
+    def _export_html(self, scene_list: List[Tuple[FrameTimecode,
+                                                  FrameTimecode]], cut_list: List[FrameTimecode],
+                     image_filenames: Optional[Dict[int, List[str]]]) -> None:
         """Handles the `export-html` command."""
         if not self.export_html:
             return
 
-        html_filename = Template(self.html_name_format).safe_substitute(
-            VIDEO_NAME=self.video_stream.name)
+        html_filename = Template(
+            self.html_name_format).safe_substitute(VIDEO_NAME=self.video_stream.name)
         if not html_filename.lower().endswith('.html'):
             html_filename += '.html'
         html_path = get_and_create_path(
             html_filename,
-            self.image_directory if self.image_directory is not None
-            else self.output_directory)
+            self.image_directory if self.image_directory is not None else self.output_directory)
         self.logger.info('Exporting to html file:\n %s:', html_path)
         if not self.html_include_images:
             image_filenames = None
-        write_scene_list_html(html_path, scene_list, cut_list,
-                                image_filenames=image_filenames,
-                                image_width=self.image_width,
-                                image_height=self.image_height)
+        write_scene_list_html(
+            html_path,
+            scene_list,
+            cut_list,
+            image_filenames=image_filenames,
+            image_width=self.image_width,
+            image_height=self.image_height)
 
     def _split_video(self, scene_list: List[Tuple[FrameTimecode, FrameTimecode]]) -> None:
         """Handles the `split-video` command."""
@@ -591,17 +588,22 @@ class CliContext(object):
             output_path_template += '.mp4'
         output_path_template = get_and_create_path(
             output_path_template,
-            self.split_directory if self.split_directory is not None
-            else self.output_directory)
+            self.split_directory if self.split_directory is not None else self.output_directory)
         # Ensure the appropriate tool is available before handling split-video.
         check_split_video_requirements(self.split_mkvmerge)
         if self.split_mkvmerge:
-            split_video_mkvmerge(self.video_stream.path, scene_list, output_path_template,
-                                 suppress_output=self.quiet_mode or self.split_quiet)
+            split_video_mkvmerge(
+                self.video_stream.path,
+                scene_list,
+                output_path_template,
+                suppress_output=self.quiet_mode or self.split_quiet)
         else:
-            split_video_ffmpeg(self.video_stream.path, scene_list, output_path_template,
-                               arg_override=self.split_args,
-                               hide_progress=self.quiet_mode,
-                               suppress_output=self.quiet_mode or self.split_quiet)
+            split_video_ffmpeg(
+                self.video_stream.path,
+                scene_list,
+                output_path_template,
+                arg_override=self.split_args,
+                hide_progress=self.quiet_mode,
+                suppress_output=self.quiet_mode or self.split_quiet)
         if scene_list:
             self.logger.info('Video splitting completed, individual scenes written to disk.')

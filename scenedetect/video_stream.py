@@ -63,6 +63,7 @@ class VideoOpenFailure(Exception):
 DEFAULT_MIN_WIDTH: int = 260
 """The default minimum width a frame will be downscaled to when calculating a downscale factor."""
 
+
 def compute_downscale_factor(frame_width: int, effective_width: int = DEFAULT_MIN_WIDTH) -> int:
     """Get the optimal default downscale factor based on a video's resolution (currently only
     the width in pixels is considered).

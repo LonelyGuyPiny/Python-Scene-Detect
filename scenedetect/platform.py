@@ -23,7 +23,6 @@
 # ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-
 """ ``scenedetect.platform`` Module
 
 This file contains all platform/library/OS-specific compatibility fixes,
@@ -58,8 +57,6 @@ from typing import List, Optional
 # Third-Party Library Imports
 import cv2
 
-
-
 ##
 ## tqdm Library (scenedetect.platform.tqdm will be tqdm object or None)
 ##
@@ -72,7 +69,6 @@ except ModuleNotFoundError:
     tqdm = None
 # pylint: enable=unused-import
 # pylint: enable=invalid-name
-
 
 # TODO(v1.0): Do we still need this?
 # Compatibility fix for OpenCV v2.x (copies CAP_PROP_* properties from the
@@ -90,7 +86,8 @@ if not 'CAP_PROP_FPS' in dir(cv2):
     cv2.INTER_CUBIC = cv2.cv.INTER_CUBIC
 # pylint: enable=no-member
 
-def get_aspect_ratio(cap: cv2.VideoCapture, epsilon: float=0.01) -> float:
+
+def get_aspect_ratio(cap: cv2.VideoCapture, epsilon: float = 0.01) -> float:
     """ Compatibility fix for OpenCV < v3.4.1 to get the aspect ratio
     of a video. For older versions, this function always returns 1.0.
 
@@ -118,6 +115,7 @@ def get_aspect_ratio(cap: cv2.VideoCapture, epsilon: float=0.01) -> float:
 ## OpenCV DLL Check Function (Windows Only)
 ##
 
+
 def check_opencv_ffmpeg_dll():
     # type: () -> Tuple[bool, str]
     """ Check OpenCV FFmpeg DLL: Checks if OpenCV video I/O support is available,
@@ -136,20 +134,22 @@ def check_opencv_ffmpeg_dll():
         where DLL_NAME is the name of the expected DLL file that OpenCV requires.
         On Non-Windows platforms, DLL_NAME will be a blank string.
     """
-    if platform.system() == 'Windows' and (
-            cv2.__version__[0].isdigit() and cv2.__version__.find('.') > 0):
+    if platform.system() == 'Windows' and (cv2.__version__[0].isdigit()
+                                           and cv2.__version__.find('.') > 0):
         is_64_bit_str = '_64' if struct.calcsize("P") == 8 else ''
         dll_filename = 'opencv_ffmpeg{OPENCV_VERSION}{IS_64_BIT}.dll'.format(
-            OPENCV_VERSION=cv2.__version__.replace('.', ''),
-            IS_64_BIT=is_64_bit_str)
-        return any([os.path.exists(os.path.join(path_path, dll_filename))
-                    for path_path in os.environ['PATH'].split(';')]), dll_filename
+            OPENCV_VERSION=cv2.__version__.replace('.', ''), IS_64_BIT=is_64_bit_str)
+        return any([
+            os.path.exists(os.path.join(path_path, dll_filename))
+            for path_path in os.environ['PATH'].split(';')
+        ]), dll_filename
     return True, ''
 
 
 ##
 ## OpenCV imwrite Supported Image Types & Quality/Compression Parameters
 ##
+
 
 def get_cv2_imwrite_params():
     # type: () -> Dict[str, Union[int, None]]
@@ -183,6 +183,7 @@ def get_cv2_imwrite_params():
 ## Python csv Module Wrapper (for StatsManager, and CliContext/list-scenes command)
 ##
 
+
 def get_csv_reader(file_handle):
     # type: (File) -> csv.reader
     """ Returns a csv.reader object using the passed file handle. """
@@ -199,6 +200,7 @@ def get_csv_writer(file_handle):
 ## File I/O
 ##
 
+
 def get_file_name(file_path: str, include_extension=True):
     """Returns the file name that `file_path` refers to, optionally removing the extension.
 
@@ -211,7 +213,7 @@ def get_file_name(file_path: str, include_extension=True):
     return file_name
 
 
-def get_and_create_path(file_path: str, output_directory: Optional[str]=None):
+def get_and_create_path(file_path: str, output_directory: Optional[str] = None):
     """ Get & Create Path: Gets and returns the full/absolute path to file_path
     in the specified output_directory if set, creating any required directories
     along the way.
@@ -242,6 +244,7 @@ def get_and_create_path(file_path: str, output_directory: Optional[str]=None):
 ##
 ## Logging
 ##
+
 
 def init_logger(log_level=logging.INFO, show_stdout=False, log_file=None):
     """ Initializes the Python logging module for PySceneDetect.
@@ -279,19 +282,21 @@ def init_logger(log_level=logging.INFO, show_stdout=False, log_file=None):
         logger_instance.addHandler(handler)
     return logger_instance
 
+
 # Default logger to be used by library objects.
 logger = init_logger()
-
 
 ##
 ## Running External Commands
 ##
+
 
 class CommandTooLong(Exception):
     """ Raised when the length of a command line argument doesn't play nicely
     with the Windows command prompt. """
     # pylint: disable=unnecessary-pass
     pass
+
 
 def invoke_command(args: List[str]) -> int:
     # type: (List[str]) -> None
