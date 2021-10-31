@@ -199,6 +199,18 @@ def get_csv_writer(file_handle):
 ## File I/O
 ##
 
+def get_file_name(file_path: str, include_extension=True):
+    """Returns the file name that `file_path` refers to, optionally removing the extension.
+
+    E.g. /tmp/foo.bar -> foo"""
+    file_name = os.path.basename(file_path)
+    if not include_extension:
+        last_dot_pos = file_name.rfind('.')
+        if last_dot_pos >= 0:
+            file_name = file_name[:last_dot_pos]
+    return file_name
+
+
 def get_and_create_path(file_path: str, output_directory: Optional[str]=None):
     """ Get & Create Path: Gets and returns the full/absolute path to file_path
     in the specified output_directory if set, creating any required directories

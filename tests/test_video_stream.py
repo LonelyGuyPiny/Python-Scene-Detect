@@ -130,6 +130,9 @@ class TestVideoStream:
         assert stream.frame_size == (test_video.width, test_video.height)
         assert stream.frame_rate == pytest.approx(test_video.frame_rate, FRAMERATE_TOLERANCE)
         assert stream.duration.get_frames() == test_video.total_frames
+        file_name = os.path.basename(test_video.path)
+        last_dot_pos = file_name.rfind('.')
+        assert stream.name == file_name[:last_dot_pos]
 
     def test_read(self, vs_type: Type[VideoStream], test_video: VideoParameters):
         """Validate basic `read` functionality."""

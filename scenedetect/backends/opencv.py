@@ -37,7 +37,7 @@ import cv2
 from numpy import ndarray
 
 from scenedetect.frame_timecode import FrameTimecode, MINIMUM_FRAMES_PER_SECOND_FLOAT
-from scenedetect.platform import get_aspect_ratio, logger
+from scenedetect.platform import get_aspect_ratio, get_file_name, logger
 from scenedetect.video_stream import VideoStream, SeekError, VideoOpenFailure
 
 
@@ -107,11 +107,7 @@ class VideoStreamCv2(VideoStream):
         """Name of the video, without extension, or device."""
         if self._is_device:
             return self.path
-        name = os.path.basename(self.path)
-        last_dot_pos = name.rfind('.')
-        if last_dot_pos >= 0:
-            name = name[:last_dot_pos]
-        return name
+        return get_file_name(self.path, include_extension=False)
 
     @property
     def is_seekable(self) -> bool:
