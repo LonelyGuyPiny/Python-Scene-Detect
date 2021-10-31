@@ -28,7 +28,11 @@ import subprocess
 
 import pytest
 
-# pylint: disable=missing-format-argument-key
+# These tests validate that the CLI itself functions correctly, mainly based on the return
+# return code from the process. We do not yet check for correctness of the output, just a
+# successful invocation of the command (i.e. no exceptions/errors).
+
+# TODO(v1.0): Test should clean up working directory (create a temp one).
 
 SCENEDETECT_CMD = 'python -m scenedetect'
 VIDEO_PATH = 'tests/goldeneye/goldeneye.mp4'
@@ -57,16 +61,19 @@ def invoke_scenedetect(args: str = '', **kwargs):
 
 
 def test_cli_no_args():
+    """Test `scenedetect` command invoked without any arguments."""
     assert invoke_scenedetect() == 0
 
 
 @pytest.mark.parametrize('info_command', ['help', 'about', 'version'])
 def test_cli_info_commands(info_command):
+    """Test `scenedetect` info commands (e.g. help, about)."""
     assert invoke_scenedetect(info_command) == 0
 
 
 @pytest.mark.parametrize('detector_command', ALL_DETECTORS)
 def test_cli_detectors(detector_command: str):
+    """Test each detection algorithm."""
     # Ensure all detectors work with and without a statsfile.
     assert invoke_scenedetect('-i {VIDEO} time {TIME} {DETECTOR}', DETECTOR=detector_command) == 0
     # Run with a statsfile twice to ensure the file is populated with those metrics and reloaded.
@@ -96,7 +103,6 @@ def test_cli_list_scenes():
     assert invoke_scenedetect('-i {VIDEO} time {TIME} {DETECTOR} list-scenes -n') == 0
 
 
-@pytest.mark.skip(reason="TODO(v1.0): Command not functional yet.")
 def test_cli_split_video():
     assert invoke_scenedetect('-i {VIDEO} -s {STATS} time {TIME} {DETECTOR} split-video') == 0
     # TODO: Check for existence of split video files, remove after.
@@ -107,7 +113,7 @@ def test_cli_save_images():
     # TODO: Check for existence of images, remove after.
 
 
-@pytest.mark.skip(reason="TODO(v1.0): Command not functional yet.")
+@pytest.mark.xfail(reason="TODO(v1.0): Command not functional yet.")
 def test_cli_export_html():
     base_command = '-i {VIDEO} -s {STATS} time {TIME} {DETECTOR} {COMMAND}'
     assert invoke_scenedetect(base_command, COMMAND='save-images export-html') == 0

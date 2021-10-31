@@ -675,7 +675,7 @@ def split_video_command(ctx, output, filename, high_quality, override_args, quie
     ctx.obj.check_input_open()
     check_split_video_requirements(copy)
 
-    if contains_sequence_or_url(ctx.obj.video_manager.get_video_paths()):
+    if contains_sequence_or_url(ctx.obj.video_stream.path):
         ctx.obj.options_processed = False
         error_str = 'The save-images command is incompatible with image sequences/URLs.'
         ctx.obj.logger.error(error_str)

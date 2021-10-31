@@ -596,12 +596,12 @@ class CliContext(object):
         # Ensure the appropriate tool is available before handling split-video.
         check_split_video_requirements(self.split_mkvmerge)
         if self.split_mkvmerge:
-            split_video_mkvmerge([self.video_stream.path], scene_list, output_path_template, self.video_stream.name,
-                                    suppress_output=self.quiet_mode or self.split_quiet)
+            split_video_mkvmerge(self.video_stream.path, scene_list, output_path_template, self.video_stream.name,
+                                 suppress_output=self.quiet_mode or self.split_quiet)
         else:
-            split_video_ffmpeg([self.video_stream.path], scene_list, output_path_template,
-                                self.video_stream.name, arg_override=self.split_args,
-                                hide_progress=self.quiet_mode,
-                                suppress_output=self.quiet_mode or self.split_quiet)
+            split_video_ffmpeg(self.video_stream.path, scene_list, output_path_template,
+                               self.video_stream.name, arg_override=self.split_args,
+                               hide_progress=self.quiet_mode,
+                               suppress_output=self.quiet_mode or self.split_quiet)
         if scene_list:
             self.logger.info('Video splitting completed, individual scenes written to disk.')

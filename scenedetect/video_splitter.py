@@ -75,12 +75,16 @@ import logging
 import subprocess
 import math
 import time
+from typing import Iterable, Tuple
 from string import Template
 
 # PySceneDetect Imports
+from scenedetect.frame_timecode import FrameTimecode
 from scenedetect.platform import tqdm, invoke_command, CommandTooLong
 
 logger = logging.getLogger('pyscenedetect')
+
+FrameTimecodePair = Tuple[FrameTimecode, FrameTimecode]
 
 COMMAND_TOO_LONG_STRING = '''
 Cannot split video due to too many scenes (resulting command
@@ -133,34 +137,30 @@ def is_ffmpeg_available():
 ## Split Video Functions
 ##
 
-def split_video_mkvmerge(input_video_paths, scene_list, output_file_template,
-                         video_name, suppress_output=False):
-    # type: (List[str], List[FrameTimecode, FrameTimecode], Optional[str],
-    #        Optional[bool]) -> None
+def split_video_mkvmerge(input_video_path: str, scene_list: Iterable[FrameTimecodePair], output_file_template: str,
+                         video_name: str, suppress_output: bool=False):
     """ Calls the mkvmerge command on the input video(s), splitting it at the
     passed timecodes, where each scene is written in sequence from 001.
 
     Arguments:
-        input_video_paths (List[str]): List of strings to the input video path(s).
-            Is a list to allow for concatenation of multiple input videos together.
-        scene_list (List[Tuple[FrameTimecode, FrameTimecode]]): List of scenes
-            (pairs of FrameTimecodes) denoting the start/end frames of each scene.
-        output_file_template (str): Template to use for output files.  Note that the
-            scene number is automatically appended to the prefix by mkvmerge.
-            Can use $VIDEO_NAME as a parameter in the template.
+        input_video_path: Path to the video to be split.
+        scene_list : List of scenes as pairs of FrameTimecodes denoting the start/end times.
+        output_file_template: Template to use for output files. Note that the scene number is
+            appended to the prefix by mkvmerge. Can use $VIDEO_NAME as a template parameter
+            (e.g. "$VIDEO_NAME-Scene").
         video_name (str): Name of the video to be substituted in output_file_template.
         suppress_output (bool): If True, adds the --quiet flag when invoking `mkvmerge`.
 
     Returns:
-        Optional[int]: Return code of invoking mkvmerge (0 on success). Returns None if
-            there are no videos or scenes to process.
+        Return code of invoking mkvmerge (0 on success). If scene_list is empty, will
+        still return 0, but no commands will be invoked.
     """
 
-    if not input_video_paths or not scene_list:
-        return None
+    if not scene_list:
+        return 0
 
-    logger.info('Splitting input video%s using mkvmerge, output path template:\n  %s',
-                 's' if len(input_video_paths) > 1 else '', output_file_template)
+    logger.info('Splitting input video using mkvmerge, output path template:\n  %s',
+                output_file_template)
 
     ret_val = 0
     # mkvmerge automatically appends '-$SCENE_NUMBER', so we remove it if present.
@@ -181,7 +181,7 @@ def split_video_mkvmerge(input_video_paths, scene_list, output_file_template,
             'parts:%s' % ','.join(
                 ['%s-%s' % (start_time.get_timecode(), end_time.get_timecode())
                  for start_time, end_time in scene_list]),
-            ' +'.join(input_video_paths)]
+            input_video_path]
         total_frames = scene_list[-1][1].get_frames() - scene_list[0][0].get_frames()
         processing_start_time = time.time()
         ret_val = invoke_command(call_list)
@@ -199,17 +199,14 @@ def split_video_mkvmerge(input_video_paths, scene_list, output_file_template,
     return ret_val
 
 
-def split_video_ffmpeg(input_video_paths, scene_list, output_file_template, video_name,
+def split_video_ffmpeg(input_video_path: str, scene_list, output_file_template, video_name,
                        arg_override='-c:v libx264 -preset fast -crf 21 -c:a aac',
                        hide_progress=False, suppress_output=False):
-    # type: (List[str], List[Tuple[FrameTimecode, FrameTimecode]], Optional[str],
-    #        Optional[str], Optional[bool], Optional[bool]) -> Optional[int]
-    """ Calls the ffmpeg command on the input video(s), generating a new video for
+    """ Calls the ffmpeg command on the input video, generating a new video for
     each scene based on the start/end timecodes.
 
     Arguments:
-        input_video_paths (List[str]): List of strings to the input video path(s).
-            Is a list to allow for concatenation of multiple input videos together.
+        input_video_path: Path to the video to be split.
         scene_list (List[Tuple[FrameTimecode, FrameTimecode]]): List of scenes
             (pairs of FrameTimecodes) denoting the start/end frames of each scene.
         output_file_template (str): Template to use for generating the output filenames.
@@ -221,31 +218,15 @@ def split_video_ffmpeg(input_video_paths, scene_list, output_file_template, vide
         suppress_output (bool): If True, will set verbosity to quiet for the first scene.
 
     Returns:
-        Optional[int]: Return code of invoking ffmpeg (0 on success). Returns None if
-            there are no videos or scenes to process.
+        Return code of invoking ffmpeg (0 on success). If scene_list is empty, will
+        still return 0, but no commands will be invoked.
     """
 
-    if not input_video_paths or not scene_list:
-        return None
+    if not scene_list:
+        return 0
 
-    logger.info(
-        'Splitting input video%s using ffmpeg, output path template:\n  %s',
-        's' if len(input_video_paths) > 1 else '', output_file_template)
-
-    # TODO: REMOVE THIS BRANCH AND CHANGE TO TAKE A SINGLE FILE ONLY.
-    if len(input_video_paths) > 1:
-        # TODO: Add support for splitting multiple/appended input videos.
-        # https://github.com/Breakthrough/PySceneDetect/issues/71
-        #
-        # Requires generating a temporary file list for ffmpeg to use as an input
-        # (see https://trac.ffmpeg.org/wiki/Concatenate#samecodec for details).
-        logger.error(
-            'Sorry, splitting multiple appended/concatenated input videos with'
-            ' ffmpeg is not supported yet. This feature will be added to a future'
-            ' version of PySceneDetect. In the meantime, you can try using the'
-            ' -c / --copy option with the split-video to use mkvmerge, which'
-            ' generates less accurate output, but supports multiple input videos.')
-        raise NotImplementedError()
+    logger.info('Splitting input video using ffmpeg, output path template:\n  %s',
+                output_file_template)
 
     arg_override = arg_override.replace('\\"', '"')
 
@@ -281,7 +262,7 @@ def split_video_ffmpeg(input_video_paths, scene_list, output_file_template, vide
                 '-ss',
                 str(start_time.get_seconds()),
                 '-i',
-                input_video_paths[0],
+                input_video_path,
                 '-t',
                 str(duration.get_seconds())
             ]

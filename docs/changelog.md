@@ -25,6 +25,7 @@ PySceneDetect Releases
  * [api] `save_images()` no longer accepts downscale_factor, since there is already the ability to resize images via the `scale` or `height`/`width` arguments
  * [api] Responsibility for frame downscaling has been moved to `SceneManager`
  * [api] The `StatsManager` load/save methods now accept a path or an open file handle
+ * [api] The video splitting functions no longer support multiple input videos for concatenation (`scenedetect.video_splitter`)
 
 
 ## PySceneDetect 0.5
