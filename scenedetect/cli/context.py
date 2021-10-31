@@ -319,10 +319,10 @@ class CliContext(object):
         self._list_scenes(scene_list, cut_list)
 
         # Handle save-images command.
-        self._save_images(scene_list)
+        image_filenames = self._save_images(scene_list)
 
         # Handle export-html command.
-        self._export_html(scene_list, cut_list)
+        self._export_html(scene_list, cut_list, image_filenames)
 
         # Handle split-video command.
         self._split_video(scene_list)
@@ -529,10 +529,10 @@ class CliContext(object):
 
     # TODO(v1.0): Test save-images output matches the frames from v0.5.x.
     def _save_images(self,
-                     scene_list: List[Tuple[FrameTimecode, FrameTimecode]]) -> Dict[int, List[str]]:
+                     scene_list: List[Tuple[FrameTimecode, FrameTimecode]]) -> Optional[Dict[int, List[str]]]:
         """Handles the `save-images` command."""
         if not self.save_images:
-            return
+            return None
 
         image_output_dir = self.output_directory
         if self.image_directory is not None:
@@ -553,7 +553,7 @@ class CliContext(object):
             width=self.width)
 
     def _export_html(self, scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
-                     cut_list: List[FrameTimecode]) -> None:
+                     cut_list: List[FrameTimecode], image_filenames: Optional[Dict[int, List[str]]]) -> None:
         """Handles the `export-html` command."""
         if not self.export_html:
             return
