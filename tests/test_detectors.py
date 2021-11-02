@@ -42,6 +42,8 @@ from scenedetect.backends.opencv import VideoStreamCv2
 
 
 # TODO(v1.0): Parameterize these tests like VideoStreams are.
+# Current test output cannot be used for profiling cases which iterate over multiple detectors.
+
 # TODO(v1.0): Add new test video.
 
 # Test case ground truth format: (threshold, [scene start frame])

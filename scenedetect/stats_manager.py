@@ -45,17 +45,16 @@ detectors being used, speeding up subsequent scene detection runs using the same
 :py:class:`SceneManager<scenedetect.scene_manager.SceneManager>`/:py:class:`StatsManager` objects.
 """
 
-# Standard Library Imports
 from logging import getLogger
 from typing import List, TextIO
 import os.path
-from scenedetect.frame_timecode import FrameTimecode
 
-# PySceneDetect Library Imports
-from scenedetect.platform import get_csv_reader
-from scenedetect.platform import get_csv_writer
+from scenedetect.frame_timecode import FrameTimecode
+from scenedetect.platform import get_csv_reader, get_csv_writer
+
 
 logger = getLogger('pyscenedetect')
+
 
 ##
 ## StatsManager CSV File Column Names (Header Row)
@@ -113,7 +112,6 @@ class StatsManager(object):
     """
 
     def __init__(self):
-        # type: ()
         # Frame metrics is a dict of frame (int): metric_dict (Dict[str, float])
         # of each frame metric key and the value it represents (usually float).
         self._frame_metrics = dict()        # Dict[FrameTimecode, Dict[str, float]]
@@ -141,7 +139,8 @@ class StatsManager(object):
             else:
                 raise FrameMetricRegistered(metric_key)
 
-
+    # TODO(v1.0): Change frame_number to a FrameTimecode now that it is just a hash and will
+    # be required for VFR support.
     def get_metrics(self, frame_number, metric_keys):
         # type: (int, List[str]) -> List[Union[None, int, float, str]]
         """ Get Metrics: Returns the requested statistics/metrics for a given frame.

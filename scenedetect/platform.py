@@ -42,7 +42,6 @@ to the cv2 namespace.  This ensures that the cv2 API is consistent
 with those changes made to it in OpenCV 3.0 and above.
 """
 
-# Standard Library Imports
 import csv
 import logging
 import os
@@ -51,11 +50,10 @@ import platform
 import struct
 import subprocess
 import sys
-
 from typing import List, Optional
 
-# Third-Party Library Imports
 import cv2
+
 
 ##
 ## tqdm Library (scenedetect.platform.tqdm will be tqdm object or None)

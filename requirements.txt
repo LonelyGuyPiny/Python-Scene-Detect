@@ -6,4 +6,5 @@ numpy
 click
 tqdm
 pytest
+dataclasses; python_version < "3.7"
 

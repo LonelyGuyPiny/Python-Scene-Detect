@@ -45,32 +45,26 @@ that process the same frames with the same detection algorithm, even if differen
 threshold values (or other algorithm options) are used.
 """
 
-# Standard Library Imports
 from string import Template
 from typing import List, Tuple, Optional, Dict, Callable, Union
 import logging
 import math
 
-# Third-Party Library Imports
 import cv2
 import numpy as np
 
-from scenedetect.platform import tqdm
-from scenedetect.platform import get_and_create_path
-
-# PySceneDetect Library Imports
-from scenedetect.video_stream import VideoStream
 from scenedetect.frame_timecode import FrameTimecode
-from scenedetect.platform import get_csv_writer
-from scenedetect.platform import get_cv2_imwrite_params
-from scenedetect.stats_manager import StatsManager
-from scenedetect.stats_manager import FrameMetricRegistered
+from scenedetect.platform import (
+    tqdm, get_and_create_path, get_csv_writer, get_cv2_imwrite_params)
+from scenedetect.video_stream import VideoStream
+from scenedetect.stats_manager import StatsManager, FrameMetricRegistered
 from scenedetect.scene_detector import SceneDetector, SparseSceneDetector
+from scenedetect.thirdparty.simpletable import (
+    SimpleTableCell, SimpleTableImage, SimpleTableRow, SimpleTable, HTMLPage)
 
-from scenedetect.thirdparty.simpletable import SimpleTableCell, SimpleTableImage
-from scenedetect.thirdparty.simpletable import SimpleTableRow, SimpleTable, HTMLPage
 
 logger = logging.getLogger('pyscenedetect')
+
 
 ##
 ## SceneManager Helper Functions
@@ -549,7 +543,7 @@ class SceneManager(object):
             # by suppressing any FrameMetricRegistered exceptions due to attempts
             # to re-register the same frame metric keys.
             try:
-                self.stats_manager.register_metrics(detector.get_metrics())
+                self.stats_manager.register_metrics(detector.metrics)
             except FrameMetricRegistered:
                 pass
 
@@ -662,6 +656,8 @@ class SceneManager(object):
     def _is_processing_required(self, frame_num: int) -> bool:
         """ Is Processing Required: Returns True if frame metrics not in StatsManager,
         False otherwise. """
+        if self.stats_manager is None:
+            return True
         return all([detector.is_processing_required(frame_num) for detector in self._detector_list])
 
     def _post_process(self, start_frame: int, end_frame: int):
@@ -674,7 +670,7 @@ class SceneManager(object):
                       duration: Union[FrameTimecode, int]=None,
                       end_time: Union[FrameTimecode, int]=None,
                       frame_skip: int=0,
-                      show_progress: bool=True,
+                      show_progress: bool=False,
                       callback: Callable[[np.ndarray, int], None] = None):
         """ Perform scene detection on the given video using the added SceneDetectors.
 

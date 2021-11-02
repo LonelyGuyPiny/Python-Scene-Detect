@@ -34,11 +34,11 @@ This detector is available from the command-line interface by using the
 `detect-threshold` command.
 """
 
-# Third-Party Library Imports
+from typing import List, Optional
+
 import numpy
 
-# PySceneDetect Library Imports
-from scenedetect.scene_detector import SceneDetector
+from scenedetect.scene_detector import DetectionEvent, SceneDetector
 
 
 ##
@@ -110,12 +110,17 @@ class ThresholdDetector(SceneDetector):
         self._metric_keys = [ThresholdDetector.THRESHOLD_VALUE_KEY]
 
 
-    def get_metrics(self):
+    @staticmethod
+    def stats_manager_required() -> bool:
+        return False
+
+
+    @property
+    def metrics(self) -> List[str]:
         return self._metric_keys
 
 
-    def process_frame(self, frame_num, frame_img):
-        # type: (int, Optional[numpy.ndarray]) -> List[int]
+    def process_frame(self, frame_num: int, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:        # type: (int, Optional[numpy.ndarray]) -> List[int]
         """
         Args:
             frame_num (int): Frame number of frame that is being passed.
@@ -179,7 +184,7 @@ class ThresholdDetector(SceneDetector):
         return cut_list
 
 
-    def post_process(self, start_frame: int, end_frame: int):
+    def post_process(self, start_frame: int, end_frame: int) -> List[DetectionEvent]:
         """Writes a final scene cut if the last detected fade was a fade-out.
 
         Only writes the scene cut if add_final_scene is true, and the last fade

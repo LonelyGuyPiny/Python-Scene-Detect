@@ -69,18 +69,16 @@ PySceneDetect will automatically use whichever program is available on
 the computer, depending on the specified command-line options.
 """
 
-# Standard Library Imports
 import logging
 import subprocess
 import math
 import time
-import os.path
 from typing import Iterable, Optional, Tuple
 from string import Template
 
-# PySceneDetect Imports
 from scenedetect.frame_timecode import FrameTimecode
 from scenedetect.platform import tqdm, invoke_command, CommandTooLong, get_file_name
+
 
 logger = logging.getLogger('pyscenedetect')
 
@@ -207,7 +205,7 @@ def split_video_mkvmerge(input_video_path: str,
 
 def split_video_ffmpeg(input_video_path: str,
                        scene_list: Iterable[FrameTimecodePair],
-                       output_file_template: str = '$VIDEO_NAME-Scene-$SCENE_NUMBER',
+                       output_file_template: str = '$VIDEO_NAME-Scene-$SCENE_NUMBER.mp4',
                        video_name: Optional[str] = None,
                        arg_override: str = '-c:v libx264 -preset fast -crf 21 -c:a aac',
                        hide_progress: bool = False,
@@ -221,7 +219,7 @@ def split_video_ffmpeg(input_video_path: str,
             (pairs of FrameTimecodes) denoting the start/end frames of each scene.
         output_file_template (str): Template to use for generating the output filenames.
             Can use $VIDEO_NAME and $SCENE_NUMBER in this format, for example:
-            `$VIDEO_NAME - Scene $SCENE_NUMBER`
+            `$VIDEO_NAME - Scene $SCENE_NUMBER.mp4`
         video_name (str): Name of the video to be substituted in output_file_template. If not
             passed will be calculated from input_video_path automatically.
         arg_override (str): Allows overriding the arguments passed to ffmpeg for encoding.

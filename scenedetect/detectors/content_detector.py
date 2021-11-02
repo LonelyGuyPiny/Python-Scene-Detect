@@ -34,12 +34,12 @@ This detector is available from the command-line interface by using the
 `detect-content` command.
 """
 
-# Third-Party Library Imports
+from typing import List, Optional
+
 import numpy
 import cv2
 
-# PySceneDetect Library Imports
-from scenedetect.scene_detector import SceneDetector
+from scenedetect.scene_detector import DetectionEvent, SceneDetector
 
 
 class ContentDetector(SceneDetector):
@@ -54,10 +54,7 @@ class ContentDetector(SceneDetector):
     DELTA_H_KEY, DELTA_S_KEY, DELTA_V_KEY = ('delta_hue', 'delta_sat', 'delta_lum')
     METRIC_KEYS = [FRAME_SCORE_KEY, DELTA_H_KEY, DELTA_S_KEY, DELTA_V_KEY]
 
-
-    def __init__(self, threshold=30.0, min_scene_len=15, luma_only=False):
-        # type: (float, Union[int, FrameTimecode]) -> None
-        super(ContentDetector, self).__init__()
+    def __init__(self, threshold: float=30.0, min_scene_len: int=15, luma_only: bool=False):
         self.threshold = threshold
         # Minimum length of any given scene, in frames (int) or FrameTimecode
         self.min_scene_len = min_scene_len
@@ -67,13 +64,14 @@ class ContentDetector(SceneDetector):
         self.last_hsv = None
 
 
-    def get_metrics(self):
+    @staticmethod
+    def stats_manager_required() -> bool:
+        return False
+
+
+    @property
+    def metrics(self) -> List[str]:
         return ContentDetector.METRIC_KEYS
-
-
-    def is_processing_required(self, frame_num):
-        return self.stats_manager is None or (
-            not self.stats_manager.metrics_exist(frame_num, ContentDetector.METRIC_KEYS))
 
 
     def calculate_frame_score(self, frame_num, curr_hsv, last_hsv):
@@ -98,8 +96,7 @@ class ContentDetector(SceneDetector):
         return delta_content if not self.luma_only else delta_v
 
 
-    def process_frame(self, frame_num, frame_img):
-        # type: (int, numpy.ndarray) -> List[int]
+    def process_frame(self, frame_num: int, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
         """ Similar to ThresholdDetector, but using the HSV colour space DIFFERENCE instead
         of single-frame RGB/grayscale intensity (thus cannot detect slow fades with this method).
 
@@ -155,7 +152,7 @@ class ContentDetector(SceneDetector):
         # If we have the next frame computed, don't copy the current frame
         # into last_frame since we won't use it on the next call anyways.
         if (self.stats_manager is not None and
-                self.stats_manager.metrics_exist(frame_num+1, self.get_metrics())):
+                self.stats_manager.metrics_exist(frame_num+1, self.metrics)):
             self.last_frame = _unused
         else:
             self.last_frame = frame_img.copy()
@@ -163,9 +160,11 @@ class ContentDetector(SceneDetector):
         return cut_list
 
 
-    #def post_process(self, frame_num):
-    #    """ TODO: Based on the parameters passed to the ContentDetector constructor,
-    #        ensure that the last scene meets the minimum length requirement,
-    #        otherwise it should be merged with the previous scene.
-    #    """
-    #    return []
+    def post_process(self, start_frame: int, end_frame: int) -> List[DetectionEvent]:
+        """Performs any processing after the last frame has been read.
+
+        TODO: Based on the parameters passed to the ContentDetector constructor,
+            ensure that the last scene meets the minimum length requirement,
+            otherwise it should be merged with the previous scene.
+        """
+        return []

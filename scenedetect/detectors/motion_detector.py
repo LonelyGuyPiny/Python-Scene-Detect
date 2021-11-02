@@ -33,11 +33,10 @@ This detector is available from the command-line interface by using the
 `detect-motion` command.
 """
 
-# Third-Party Library Imports
 import cv2
 
-# PySceneDetect Library Imports
 from scenedetect.scene_detector import SparseSceneDetector
+
 
 class MotionDetector(SparseSceneDetector):
     """Detects motion events in scenes containing a static background.

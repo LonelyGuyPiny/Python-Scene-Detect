@@ -35,10 +35,16 @@ This detector is available from the command-line interface by using the
 `detect-adaptive` command.
 """
 
-# PySceneDetect Library Imports
+from typing import List, Optional
+
+import numpy
+
 from scenedetect.detectors import ContentDetector
+from scenedetect.scene_detector import DetectionEvent
 
 
+# TODO(v1.0): This class should own and create it's own ContentDetector rather
+# than using inheritance.
 class AdaptiveDetector(ContentDetector):
     """Detects cuts using HSV changes similar to ContentDetector, but with a
     rolling average that can help mitigate false detections in situations such
@@ -49,7 +55,7 @@ class AdaptiveDetector(ContentDetector):
 
     def __init__(self, adaptive_threshold=3.0,
                  luma_only=False, min_scene_len=15, min_delta_hsv=15.0, window_width=2):
-        super(AdaptiveDetector, self).__init__()
+        super().__init__()
         self.min_scene_len = min_scene_len  # minimum length of any given scene, in frames (int) or FrameTimecode
         self.adaptive_threshold = adaptive_threshold
         self.min_delta_hsv = min_delta_hsv
@@ -58,13 +64,8 @@ class AdaptiveDetector(ContentDetector):
         self._adaptive_ratio_key = AdaptiveDetector.ADAPTIVE_RATIO_KEY_TEMPLATE.format(
             window_width=window_width, luma_only='' if not luma_only else '_lum')
 
-
-    def get_metrics(self):
-        # type: () -> List[str]
-        """ Combines base ContentDetector metric keys with the AdaptiveDetector one. """
-        return super(AdaptiveDetector, self).get_metrics() + [self._adaptive_ratio_key]
-
-    def stats_manager_required(self):
+    @staticmethod
+    def stats_manager_required() -> bool:
         # type: () -> bool
         """ Overload to indicate that this detector requires a StatsManager.
 
@@ -73,8 +74,16 @@ class AdaptiveDetector(ContentDetector):
         """
         return True
 
-    def process_frame(self, frame_num, frame_img):
-        # type: (int, numpy.ndarray) -> List[int]
+
+    @property
+    def metrics(self) -> List[str]:
+        # type: () -> List[str]
+        """ Combines base ContentDetector metric keys with the AdaptiveDetector one. """
+
+        return super().metrics + [self._adaptive_ratio_key]
+
+
+    def process_frame(self, frame_num: int, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
         """ Similar to ThresholdDetector, but using the HSV colour space DIFFERENCE instead
         of single-frame RGB/grayscale intensity (thus cannot detect slow fades with this method).
 
@@ -82,8 +91,7 @@ class AdaptiveDetector(ContentDetector):
             frame_num (int): Frame number of frame that is being passed.
 
             frame_img (Optional[int]): Decoded frame image (numpy.ndarray) to perform scene
-                detection on. Can be None *only* if the self.is_processing_required() method
-                (inhereted from the base SceneDetector class) returns True.
+                detection on, or None if `is_processing_required()` returns False.
 
         Returns:
             Empty list
@@ -92,13 +100,12 @@ class AdaptiveDetector(ContentDetector):
         # Call the process_frame function of ContentDetector but ignore any
         # returned cuts
         if self.is_processing_required(frame_num):
-            super(AdaptiveDetector, self).process_frame(
-                frame_num=frame_num, frame_img=frame_img)
+            super().process_frame(frame_num, frame_img)
 
         return []
 
 
-    def get_content_val(self, frame_num):
+    def get_content_val(self, frame_num: int):
         """
         Returns the average content change for a frame.
         """
@@ -108,7 +115,7 @@ class AdaptiveDetector(ContentDetector):
             frame_num, [metric_key])[0]
 
 
-    def post_process(self, start_frame: int, end_frame: int):
+    def post_process(self, start_frame: int, end_frame: int) -> List[DetectionEvent]:
         """
         After an initial run through the video to detect content change
         between each frame, we try to identify fast cuts as short peaks in the

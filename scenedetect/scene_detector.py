@@ -23,7 +23,6 @@
 # ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-
 """ ``scenedetect.scene_detector`` Module
 
 This module implements the base SceneDetector class, from which all scene
@@ -33,84 +32,110 @@ The SceneDetector class represents the interface which detection algorithms
 are expected to provide in order to be compatible with PySceneDetect.
 """
 
-# pylint: disable=unused-argument, no-self-use
+# _: disable=unused-argument, no-self-use
 
-# TODO(v1.0): Make this an ABC.
-class SceneDetector(object):
-    """ Base class to inherit from when implementing a scene detection algorithm.
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
-    This represents a "dense" scene detector, which returns a list of frames where
-    the next scene/shot begins in a video.
+from scenedetect.frame_timecode import FrameTimecode
+from scenedetect.stats_manager import StatsManager
 
-    Also see the implemented scene detectors in the scenedetect.detectors module
-    to get an idea of how a particular detector can be created.
+import numpy
+
+
+class EventType(Enum):
+    CUT = 1        # Fast cut
+    FADE_OUT = 1   # Fade out to black
+    FADE_IN = 2    # Fade in from black
+    START = 3      # Start of a scene/event
+    END = 4        # End of a scene/event
+
+
+@dataclass
+class DetectionEvent:
+    """Encapsulates the event data which SceneDetectors objects produce while processing frames:
+        - `kind`: Event type (see `EventType`)
+        - `time`: Timecode/frame corresponding to the event
+        - `context`: Additional data specific to each detector. See each detector's documentation
+        for what values it populates (e.g. certain detectors may produce a confidence score).
     """
+    kind: EventType
+    time: FrameTimecode
+    context: Dict[str, Any]
 
-    stats_manager = None
-    """ Optional :py:class:`StatsManager <scenedetect.stats_manager.StatsManager>` to
-    use for caching frame metrics to and from."""
+class SceneDetector(ABC):
+    """Interface which a scene detection algorithm must implement."""
+    def __init__(self):
+        self._stats_manager = None
 
-    def is_processing_required(self, frame_num):
-        # type: (int) -> bool
-        """ Is Processing Required: Test if all calculations for a given frame are already done.
+    @property
+    def stats_manager(self) -> Optional[StatsManager]:
+        """Returns the StatsManager bound to this object, if any."""
+        return self._stats_manager
+
+    @stats_manager.setter
+    def stats_manager(self, value: StatsManager):
+        """Sets the StatsManager bound to this object, if any."""
+        self._stats_manager = value
+
+    def is_processing_required(self, frame_num: int) -> bool:
+        """Test if all calculations for a given frame are already done and stored in the
+        associated StatsManager. Always True if there is no StatsManager.
 
         Returns:
-            bool: False if the SceneDetector has assigned _metric_keys, and the
-            stats_manager property is set to a valid StatsManager object containing
-            the required frame metrics/calculations for the given frame - thus, not
-            needing the frame to perform scene detection.
+            False if all calculations for timecode can be found in `stats_manager`, True otherwise.
+            If True, calling `process_frame` with the given timecode (`frame_num`)
 
-            True otherwise (i.e. the frame_img passed to process_frame is required
+            the timecode passed to `process_frame is required
             to be passed to process_frame for the given frame_num).
         """
-        metric_keys = self.get_metrics()
-        return not metric_keys or not (
-            self.stats_manager is not None and
-            self.stats_manager.metrics_exist(frame_num, metric_keys))
+        return not self.metrics or self.stats_manager or (
+            not self.stats_manager.metrics_exist(frame_num, self.metrics))
 
-
-    def stats_manager_required(self):
-        # type: () -> bool
+    @staticmethod
+    @abstractmethod
+    def stats_manager_required():
         """ Stats Manager Required: Prototype indicating if detector requires stats.
 
         Returns:
             bool: True if a StatsManager is required for the detector, False otherwise.
         """
-        return False
+        raise NotImplementedError
 
-
-    def get_metrics(self):
+    @property
+    @abstractmethod
+    def metrics(self) -> List[str]:
         # type: () -> List[str]
-        """ Get Metrics:  Get a list of all metric names/keys used by the detector.
+        """ Metrics:  List of all metric names/keys used by the detector.
 
         Returns:
             List[str]: A list of strings of frame metric key names that will be used by
             the detector when a StatsManager is passed to process_frame.
         """
-        return []
+        raise NotImplementedError
 
+    @abstractmethod
+    def process_frame(self, frame_num: int, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
+        """Computes/stores metrics and detects any scene changes.
 
-    def process_frame(self, frame_num, frame_img):
-        # type: (int, numpy.ndarray) -> List[int]
-        """ Process Frame: Computes/stores metrics and detects any scene changes.
-
-        Prototype method, no actual detection.
-
-        Returns:
-            List[int]: List of frame numbers of cuts to be added to the cutting list.
-        """
-        return []
-
-
-    def post_process(self, start_frame: int, end_frame: int):
-        """ Post Process: Performs any processing after the last frame has been read.
-
-        Prototype method, no actual detection.
+        `frame_img` may be None only if calling `is_processing_required` with the same `frame_num`
+        returns False.
 
         Returns:
             List[int]: List of frame numbers of cuts to be added to the cutting list.
         """
-        return []
+        raise NotImplementedError
+
+    @abstractmethod
+    def post_process(self, start_frame: int, end_frame: int) -> List[DetectionEvent]:
+        """Performs any processing after the last frame has been read.
+
+        Returns:
+            List[int]: List of frame numbers of cuts to be added to the cutting list.
+        """
+        raise NotImplementedError
 
 
 class SparseSceneDetector(SceneDetector):

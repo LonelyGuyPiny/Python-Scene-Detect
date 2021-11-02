@@ -26,6 +26,7 @@ PySceneDetect Releases
  * [api] Responsibility for frame downscaling has been moved to `SceneManager`
  * [api] The `StatsManager` load/save methods now accept a path or an open file handle
  * [api] The video splitting functions no longer support multiple input videos for concatenation (`scenedetect.video_splitter`)
+ * [api] The `SceneManager.detect_scenes()` method no longer displays a progress bar *by default* (set `show_progress=True` to restore the previous behaviour)
 
 
 ## PySceneDetect 0.5

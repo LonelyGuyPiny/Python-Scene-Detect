@@ -40,23 +40,20 @@ Some of this parsing functionality is shared between the scenedetect.cli
 module and the scenedetect.cli.CliContext object.
 """
 
-# Standard Library Imports
 from __future__ import print_function
 import logging
 
-# Third-Party Library Imports
 import click
 
-# PySceneDetect Library Imports
 import scenedetect
-
 from scenedetect.cli.context import check_split_video_requirements
 from scenedetect.cli.context import contains_sequence_or_url
 from scenedetect.cli.context import parse_timecode
-
-from scenedetect.platform import get_and_create_path
 from scenedetect.platform import init_logger
+
+
 logger = logging.getLogger('pyscenedetect')
+
 
 def get_help_command_preface(command_name='scenedetect'):
     """ Preface/intro help message shown at the beginning of the help command. """
@@ -256,8 +253,11 @@ def scenedetect_cli(ctx, input, output, framerate, downscale, frame_skip,
             frame_skip=frame_skip, min_scene_len=min_scene_len, drop_short_scenes=drop_short_scenes)
 
         ctx.obj.options_processed = True
+    except click.BadParameter as ex:
+        ctx.obj.logger.debug('Could not parse CLI options, bad parameter: %s', ex)
+        raise
     except Exception as ex:
-        ctx.obj.logger.error('Could not parse CLI options.: %s', ex)
+        ctx.obj.logger.error('Could not parse CLI options: %s', ex)
         raise
 
 
@@ -615,6 +615,21 @@ def list_scenes_command(ctx, output, filename, no_output_file, quiet, skip_cuts)
     ctx.obj.list_scenes = True
 
 
+# TODO(v1.0): Allow these variables and similar in other string templates.
+# Write a helper function that takes a video manager, scene list, and
+# scene number, and replaces all of the following with the relevant variables.
+#
+#@click.option(
+#    '--filename', '-f', metavar='NAME', default='$VIDEO_NAME-Scene-$SCENE_NUMBER',
+#    type=click.STRING, show_default=True, help=
+#    'File name format to use when saving videos (with or without extension). You can use'
+#    ' the following variables with {VARNAME} in the output:'
+#    '  - VIDEO_NAME: name of video without extension\n'
+#    '  - SCENE_NUMBER: scene/cut NNNNN starting from 1\n'
+#    '  - START_TIME, END_TIME, DURATION: hh.mm.ss.nnn\n'
+#    '  - START_FRAME, END_FRAME: frame number NNNNNNNN starting from 1\n'
+#    'For example:\n'
+#    '    {VIDEO_NAME}-Scene-{SCENE_NUMBER}.mp4\n')
 
 @click.command('split-video', add_help_option=False)
 @click.option(
@@ -623,10 +638,11 @@ def list_scenes_command(ctx, output, filename, no_output_file, quiet, skip_cuts)
     'Output directory to save videos to. Overrides global option -o/--output if set.')
 @click.option(
     '--filename', '-f', metavar='NAME', default='$VIDEO_NAME-Scene-$SCENE_NUMBER',
-    type=click.STRING, show_default=True, help=
-    'File name format, to use when saving image files. You can use the'
-    ' $VIDEO_NAME and $SCENE_NUMBER macros in the file name. Note that'
-    ' you may have to wrap the name using single quotes.')
+    type=click.STRING, show_default=True, help= # TODO(v1.0): Change macros to {}s?
+    'File name format to use when saving videos (with or without'
+    ' extension). You can use the $VIDEO_NAME and $SCENE_NUMBER macros'
+    ' in the filename (e.g.).'
+    ' Note that you may have to wrap the format in single quotes.')
 @click.option(
     '--high-quality', '-hq',
     is_flag=True, flag_value=True, help=

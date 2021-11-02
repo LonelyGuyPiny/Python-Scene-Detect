@@ -30,7 +30,6 @@ interface (CLI) context class CliContext, used for the main application
 state/context and logic to run the PySceneDetect CLI.
 """
 
-# Standard Library Imports
 from __future__ import print_function
 import logging
 import os
@@ -38,36 +37,20 @@ import time
 from string import Template
 from typing import Dict, List, Tuple, Optional, Union
 
-# Third-Party Library Imports
 import click
 import cv2
 
-# PySceneDetect Library Imports
-import scenedetect.detectors
-
-from scenedetect.scene_manager import SceneManager
-from scenedetect.scene_manager import save_images
-from scenedetect.scene_manager import write_scene_list
-from scenedetect.scene_manager import write_scene_list_html
-
-from scenedetect.stats_manager import StatsManager
-from scenedetect.stats_manager import StatsFileCorrupt
-
-from scenedetect.video_stream import VideoStream
-
-from scenedetect.video_splitter import is_mkvmerge_available
-from scenedetect.video_splitter import is_ffmpeg_available
-from scenedetect.video_splitter import split_video_mkvmerge
-from scenedetect.video_splitter import split_video_ffmpeg
-
-from scenedetect.platform import get_cv2_imwrite_params
-from scenedetect.platform import check_opencv_ffmpeg_dll
-from scenedetect.platform import get_and_create_path
-
-from scenedetect.frame_timecode import FrameTimecode, MINIMUM_FRAMES_PER_SECOND_FLOAT
-
-from scenedetect.video_stream import VideoOpenFailure
 from scenedetect.backends.opencv import VideoStreamCv2
+from scenedetect.frame_timecode import FrameTimecode, MINIMUM_FRAMES_PER_SECOND_FLOAT
+import scenedetect.detectors
+from scenedetect.platform import (
+    check_opencv_ffmpeg_dll, get_and_create_path, get_cv2_imwrite_params)
+from scenedetect.scene_manager import (
+    SceneManager, save_images, write_scene_list, write_scene_list_html)
+from scenedetect.stats_manager import StatsManager, StatsFileCorrupt
+from scenedetect.video_stream import VideoStream, VideoOpenFailure
+from scenedetect.video_splitter import (
+    is_mkvmerge_available, is_ffmpeg_available, split_video_mkvmerge, split_video_ffmpeg)
 
 
 def parse_timecode(value: Union[str, int, FrameTimecode], frame_rate: float) -> FrameTimecode:
@@ -371,15 +354,15 @@ class CliContext(object):
                     click.style(
                         '\nOpenCV dependency missing, video input/decoding not available.\n',
                         fg='red'))
-            raise click.BadParameter('Failed to open video!', param_hint='input video')
+            raise click.BadParameter('Failed to open video!', param_hint='-i/--input')
         except IOError as ex:
-            self.logger.error('Input error: %s', str(ex))
-            raise click.BadParameter('Input error!', param_hint='input video')
+            raise click.BadParameter('Input error:\n\n\t%s\n' % str(ex), param_hint='-i/--input')
 
         if self.video_stream.frame_rate < MINIMUM_FRAMES_PER_SECOND_FLOAT:
-            self.logger.error('Failed to obtain framerate for input video.'
-                              ' Manually specify framerate with the -f/--framerate option.')
-            raise click.BadParameter('Failed to get framerate!', param_hint='input video')
+            raise click.BadParameter(
+                'Failed to obtain framerate for input video. Manually specify framerate with the'
+                ' -f/--framerate option, or try re-encoding the file.',
+                param_hint='-i/--input')
 
     def _open_stats_file(self, file_path: str):
         """Initializes this object's StatsManager, loading any existing stats from disk.

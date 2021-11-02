@@ -39,10 +39,10 @@ from numpy import ndarray
 from scenedetect.platform import logger
 from scenedetect.frame_timecode import FrameTimecode
 
+
 ##
 ## VideoManager Exceptions
 ##
-
 
 class SeekError(Exception):
     """Either an unrecoverable error happened while attempting to seek, or the underlying
@@ -86,9 +86,6 @@ def compute_downscale_factor(frame_width: int, effective_width: int = DEFAULT_MI
 
 class VideoStream(ABC):
     """ Interface which all video backends must implement. """
-
-    def __init__(self):
-        self._downscale: int = 1
 
     @property
     def base_timecode(self) -> FrameTimecode:
