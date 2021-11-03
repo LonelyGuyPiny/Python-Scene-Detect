@@ -60,6 +60,15 @@ def invoke_scenedetect(args: str = '', **kwargs):
     return subprocess.call(command.strip().split(' '))
 
 
+def can_invoke(cmd: str):
+    try:
+        subprocess.call(cmd)
+    # pylint: disable=bare-except
+    except:
+        return False
+    return True
+
+
 def test_cli_no_args():
     """Test `scenedetect` command invoked without any arguments."""
     assert invoke_scenedetect() == 0
@@ -104,7 +113,7 @@ def test_cli_list_scenes():
     # Suppress output file
     assert invoke_scenedetect('-i {VIDEO} time {TIME} {DETECTOR} list-scenes -n') == 0
 
-
+@pytest.mark.skipif(condition=not can_invoke('ffmpeg'), reason="ffmpeg could not be invoked!")
 def test_cli_split_video():
     assert invoke_scenedetect('-i {VIDEO} -s {STATS} time {TIME} {DETECTOR} split-video') == 0
     # TODO: Check for existence of split video files, remove after.
