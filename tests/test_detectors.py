@@ -72,8 +72,7 @@ def test_content_detector(test_movie_clip):
         assert len(scene_list) == len(start_frames)
         detected_start_frames = [
             timecode.get_frames() for timecode, _ in scene_list ]
-        assert all(x == y for (x, y) in zip(start_frames, detected_start_frames))
-
+        assert start_frames == detected_start_frames
 
 
 def test_adaptive_detector(test_movie_clip):
@@ -100,7 +99,7 @@ def test_adaptive_detector(test_movie_clip):
     assert len(scene_list) == len(start_frames)
     detected_start_frames = [
         timecode.get_frames() for timecode, _ in scene_list ]
-    assert all(x == y for (x, y) in zip(start_frames, detected_start_frames))
+    assert start_frames == detected_start_frames
 
 
 
@@ -120,8 +119,7 @@ def test_threshold_detector(test_video_file):
     assert len(scene_list) == len(TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD)
     detected_start_frames = [
         timecode.get_frames() for timecode, _ in scene_list ]
-    assert all(x == y for (x, y) in zip(
-        TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD, detected_start_frames))
+    assert TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD == detected_start_frames
 
 
 def test_detectors_with_stats(test_video_file):

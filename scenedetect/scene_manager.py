@@ -472,6 +472,10 @@ class SceneManager(object):
         """TODO(v1.0): This class should own a StatsManager instead of taking an optional one.
         Change `stats_manager` to to `store_stats: bool=False, and expose a new
         `stats_manager` @property. from the SceneManager.
+
+        TODO(v1.0): This class should own a VideoStream as well, instead of continually passing one
+        to the detect_scenes method.  If concatenation is required, it can be implemented as a
+        generic VideoStream wrapper.
         """
         self._cutting_list: List[FrameTimecode] = []
         self._event_list: List[Tuple[FrameTimecode]] = []
@@ -482,7 +486,8 @@ class SceneManager(object):
         self._stats_manager: Optional[StatsManager] = stats_manager
 
         self._num_frames = 0
-        self._start_frame = 0
+        # Position of video that was first passed to detect_scenes.
+        self._start_frame = None
         self._base_timecode: Optional[FrameTimecode] = None
         self._downscale: int = 1
         self._auto_downscale: bool = False
@@ -585,7 +590,7 @@ class SceneManager(object):
         """
         if base_timecode is None:
             base_timecode = self._base_timecode
-        if base_timecode is None:
+        if base_timecode is None or self._start_frame is None:
             return []
         return sorted(
             self.get_event_list(base_timecode) + get_scenes_from_cuts(
@@ -712,21 +717,24 @@ class SceneManager(object):
             raise ValueError('end_time must be greater than or equal to 0!')
 
         self._base_timecode = video.base_timecode
-        self._start_frame = video.frame_number
+        start_frame_num: int = video.frame_number
+        if self._start_frame is None:
+            self._start_frame = start_frame_num
 
         if duration is not None:
-            end_time = duration + self._start_frame
+            end_time = duration + start_frame_num
 
         if end_time is not None:
             end_time = self._base_timecode + end_time
 
-        if end_time is not None and end_time < video.duration:
-            total_frames = (end_time - self._start_frame) + 1
-        else:
-            total_frames = (video.duration.get_frames() - self._start_frame)
-        # Ensure total_frames is an int.
-        if isinstance(total_frames, FrameTimecode):
-            total_frames = total_frames.get_frames()
+        # Can only calculate total number of frames we expect to process if the duration of
+        # the video is available.
+        total_frames = 0
+        if video.duration is not None:
+            if end_time is not None and end_time < video.duration:
+                total_frames = (end_time - start_frame_num) + 1
+            else:
+                total_frames = (video.duration.get_frames() - start_frame_num)
 
         # Calculate the desired downscale factor and log the effective resolution.
         if self.auto_downscale:
@@ -740,10 +748,9 @@ class SceneManager(object):
 
         progress_bar = None
         if tqdm and show_progress:
-            progress_bar = tqdm(total=total_frames, unit='frames', dynamic_ncols=True)
+            progress_bar = tqdm(total=int(total_frames), unit='frames', dynamic_ncols=True)
         try:
             last_frame = 0
-            decoded = False
             frame_im = None
             while True:
                 # The following is a hack for ContentDetector since it requires frame deltas.
@@ -762,7 +769,6 @@ class SceneManager(object):
 
                 # Frames are internally indexed from 0 (i.e. the first frame is frame 0).
                 last_frame = video.frame_number - 1
-                decoded = True
                 self._process_frame(last_frame, frame_im, callback)
 
                 if progress_bar:
@@ -777,14 +783,13 @@ class SceneManager(object):
 
                 if end_time is not None and video.position >= end_time:
                     break
-            # Only call post process if we actually processed any frames.
-            if decoded:
-                self._post_process(self._start_frame, last_frame)
+
+            self._post_process(self._start_frame, last_frame)
 
         finally:
 
             if progress_bar:
                 progress_bar.close()
 
-        self._num_frames = video.frame_number - self._start_frame
+        self._num_frames = video.frame_number - start_frame_num
         return self._num_frames

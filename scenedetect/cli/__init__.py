@@ -225,6 +225,9 @@ def scenedetect_cli(ctx, input, output, framerate, downscale, frame_skip,
     """
     ctx.call_on_close(ctx.obj.process_input)
 
+    # TODO(v1.0): Make the stats value optional (e.g. allow -s only), and allow use of
+    # $VIDEO_NAME macro in the name.  Default to $VIDEO_NAME.csv.
+
     logging.disable(logging.NOTSET)
 
     verbosity = getattr(logging, verbosity.upper()) if verbosity is not None else None

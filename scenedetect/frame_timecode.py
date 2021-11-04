@@ -125,8 +125,7 @@ class FrameTimecode(object):
         #    self.frame_num = int(secs * self.framerate)
 
 
-    def get_frames(self):
-        # type: () -> int
+    def get_frames(self, as_pts: bool = False):
         """ Get the current time/position in number of frames.  This is the
         equivalent of accessing the self.frame_num property (which, along
         with the specified framerate, forms the base for all of the other
@@ -137,8 +136,9 @@ class FrameTimecode(object):
 
         Returns:
             int: The current time in frames (the current frame number).
+            as_pts: If True, will treat time 0.0s as frame 1 instead of frame 0.
         """
-        return int(self.frame_num)
+        return int(self.frame_num) + (1 if as_pts else 0)
 
 
     def get_framerate(self):

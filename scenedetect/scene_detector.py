@@ -32,41 +32,48 @@ The SceneDetector class represents the interface which detection algorithms
 are expected to provide in order to be compatible with PySceneDetect.
 """
 
-# _: disable=unused-argument, no-self-use
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+import numpy
+
 from scenedetect.frame_timecode import FrameTimecode
 from scenedetect.stats_manager import StatsManager
 
-import numpy
-
 
 class EventType(Enum):
-    CUT = 1        # Fast cut
-    FADE_OUT = 1   # Fade out to black
-    FADE_IN = 2    # Fade in from black
-    START = 3      # Start of a scene/event
-    END = 4        # End of a scene/event
+    """Describes the type of event/change that a detector produced while procesing frames.
+
+    Values:
+        CUT: Fast cut
+        IN: Beginning of a scene/event (e.g. fade-in event, motion start)
+        OUT: End of a scene/event (e.g. fade-out event, motion stop)
+    """
+    CUT = 1
+    IN = 2
+    OUT = 3
 
 
 @dataclass
 class DetectionEvent:
-    """Encapsulates the event data which SceneDetectors objects produce while processing frames:
-        - `kind`: Event type (see `EventType`)
-        - `time`: Timecode/frame corresponding to the event
-        - `context`: Additional data specific to each detector. See each detector's documentation
-        for what values it populates (e.g. certain detectors may produce a confidence score).
+    """Event data which SceneDetectors objects produce while processing frames.
+
+    Attributes:
+        kind (EventType): Type of event which was detected (see `EventType`)
+        time (FrameTimecode): Presentation timestamp corresponding to the event
+        context (Dict[str, Any]): Data specific to each detector. See each detector's documentation
+            for what values it populates (e.g. certain detectors may produce a confidence score).
     """
     kind: EventType
     time: FrameTimecode
     context: Dict[str, Any]
 
+
 class SceneDetector(ABC):
     """Interface which a scene detection algorithm must implement."""
+
     def __init__(self):
         self._stats_manager = None
 
@@ -91,8 +98,8 @@ class SceneDetector(ABC):
             the timecode passed to `process_frame is required
             to be passed to process_frame for the given frame_num).
         """
-        return not self.metrics or self.stats_manager or (
-            not self.stats_manager.metrics_exist(frame_num, self.metrics))
+        return not self.metrics or self.stats_manager or (not self.stats_manager.metrics_exist(
+            frame_num, self.metrics))
 
     @staticmethod
     @abstractmethod
@@ -117,7 +124,8 @@ class SceneDetector(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def process_frame(self, frame_num: int, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
+    def process_frame(self, frame_num: int,
+                      frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
         """Computes/stores metrics and detects any scene changes.
 
         `frame_img` may be None only if calling `is_processing_required` with the same `frame_num`
@@ -158,7 +166,6 @@ class SparseSceneDetector(SceneDetector):
             to be added to the output scene list directly.
         """
         return []
-
 
     def post_process(self, frame_num):
         # type: (int) -> List[Tuple[int, int]]
