@@ -40,6 +40,7 @@ from typing import List, Optional
 import numpy
 
 from scenedetect.detectors import ContentDetector
+from scenedetect.frame_timecode import FrameTimecode
 from scenedetect.scene_detector import DetectionEvent
 
 
@@ -83,7 +84,7 @@ class AdaptiveDetector(ContentDetector):
         return super().metrics + [self._adaptive_ratio_key]
 
 
-    def process_frame(self, frame_num: int, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
+    def process_frame(self, timecode: FrameTimecode, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
         """ Similar to ThresholdDetector, but using the HSV colour space DIFFERENCE instead
         of single-frame RGB/grayscale intensity (thus cannot detect slow fades with this method).
 
@@ -99,8 +100,8 @@ class AdaptiveDetector(ContentDetector):
 
         # Call the process_frame function of ContentDetector but ignore any
         # returned cuts
-        if self.is_processing_required(frame_num):
-            super().process_frame(frame_num, frame_img)
+        if self.is_processing_required(timecode):
+            super().process_frame(timecode, frame_img)
 
         return []
 
@@ -115,7 +116,7 @@ class AdaptiveDetector(ContentDetector):
             frame_num, [metric_key])[0]
 
 
-    def post_process(self, start_frame: int, end_frame: int) -> List[DetectionEvent]:
+    def post_process(self, start_time: FrameTimecode, end_time: FrameTimecode) -> List[DetectionEvent]:
         """
         After an initial run through the video to detect content change
         between each frame, we try to identify fast cuts as short peaks in the
@@ -129,6 +130,8 @@ class AdaptiveDetector(ContentDetector):
         adaptive_threshold = self.adaptive_threshold
         window_width = self.window_width
         last_cut = None
+        start_frame = start_time.frame_num
+        end_frame = end_time.frame_num
 
         assert self.stats_manager is not None
 

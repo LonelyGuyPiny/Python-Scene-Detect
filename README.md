@@ -55,7 +55,7 @@ the `threshold` argument to modify the sensitivity of the scene detection.
 
 ```python
 # Standard PySceneDetect imports:
-from scenedetect import open_stream, SceneManager
+from scenedetect import open_video, SceneManager
 # For content-aware scene detection:
 from scenedetect.detectors import ContentDetector
 
@@ -65,11 +65,8 @@ def find_scenes(video_path, threshold=30.0):
     scene_manager = SceneManager()
     scene_manager.add_detector(
         ContentDetector(threshold=threshold))
-
-    # Improve processing speed by downscaling before processing.
-    scene_manager.auto_downscale = True
+    # Process all frames in the video.
     scene_manager.detect_scenes(video)
-
     # Each returned scene is a tuple of the (start, end) timecode.
     return scene_manager.get_scene_list()
 ```

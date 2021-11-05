@@ -34,12 +34,13 @@ This detector is available from the command-line interface by using the
 `detect-content` command.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy
 import cv2
 
-from scenedetect.scene_detector import DetectionEvent, SceneDetector
+from scenedetect.frame_timecode import FrameTimecode
+from scenedetect.scene_detector import DetectionEvent, EventType, SceneDetector
 
 
 class ContentDetector(SceneDetector):
@@ -59,9 +60,12 @@ class ContentDetector(SceneDetector):
         # Minimum length of any given scene, in frames (int) or FrameTimecode
         self.min_scene_len = min_scene_len
         self.luma_only = luma_only
-        self.last_frame = None
-        self.last_scene_cut = None
         self.last_hsv = None
+        # Either the last frame that was processed, or True if the last frame has statistics for it
+        # already calculated. Set to None until the first frame is processed.
+        self._last_frame: Optional[Union[bool, numpy.ndarray]] = None
+        # Frame index of the last time a cut was detected.
+        self._last_scene_cut: Optional[FrameTimecode] = None
 
 
     @staticmethod
@@ -96,14 +100,14 @@ class ContentDetector(SceneDetector):
         return delta_content if not self.luma_only else delta_v
 
 
-    def process_frame(self, frame_num: int, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
+    def process_frame(self, timecode: FrameTimecode, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
         """ Similar to ThresholdDetector, but using the HSV colour space DIFFERENCE instead
         of single-frame RGB/grayscale intensity (thus cannot detect slow fades with this method).
 
         Arguments:
-            frame_num (int): Frame number of frame that is being passed.
+            timecode: Presentation timestamp of the frame being processed.
 
-            frame_img (Optional[int]): Decoded frame image (numpy.ndarray) to perform scene
+            frame_img: Decoded frame image (numpy.ndarray) to perform scene
                 detection on. Can be None *only* if the self.is_processing_required() method
                 (inhereted from the base SceneDetector class) returns True.
 
@@ -113,14 +117,14 @@ class ContentDetector(SceneDetector):
         """
 
         cut_list = []
-        _unused = ''
+        frame_num = timecode.frame_num
 
         # Initialize last scene cut point at the beginning of the frames of interest.
-        if self.last_scene_cut is None:
-            self.last_scene_cut = frame_num
+        if self._last_scene_cut is None:
+            self._last_scene_cut = frame_num
 
         # We can only start detecting once we have a frame to compare with.
-        if self.last_frame is not None:
+        if self._last_frame is not None:
             # We obtain the change in average of HSV (frame_score), (h)ue only,
             # (s)aturation only, and (l)uminance only.  These are refered to in a statsfile
             # as their respective metric keys.
@@ -133,34 +137,33 @@ class ContentDetector(SceneDetector):
                 curr_hsv = cv2.split(cv2.cvtColor(frame_img, cv2.COLOR_BGR2HSV))
                 last_hsv = self.last_hsv
                 if not last_hsv:
-                    last_hsv = cv2.split(cv2.cvtColor(self.last_frame, cv2.COLOR_BGR2HSV))
-
+                    last_hsv = cv2.split(cv2.cvtColor(self._last_frame, cv2.COLOR_BGR2HSV))
                 frame_score = self.calculate_frame_score(frame_num, curr_hsv, last_hsv)
-
                 self.last_hsv = curr_hsv
 
             # We consider any frame over the threshold a new scene, but only if
             # the minimum scene length has been reached (otherwise it is ignored).
             if frame_score >= self.threshold and (
-                    (frame_num - self.last_scene_cut) >= self.min_scene_len):
-                cut_list.append(frame_num)
-                self.last_scene_cut = frame_num
-
-            if self.last_frame is not None and self.last_frame is not _unused:
-                del self.last_frame
+                    (frame_num - self._last_scene_cut) >= self.min_scene_len):
+                cut_list.append(DetectionEvent(
+                    kind=EventType.CUT,
+                    time=timecode,
+                    context={'confidence': 'TODO(v1.0)'}
+                ))
+                self._last_scene_cut = frame_num
 
         # If we have the next frame computed, don't copy the current frame
         # into last_frame since we won't use it on the next call anyways.
         if (self.stats_manager is not None and
                 self.stats_manager.metrics_exist(frame_num+1, self.metrics)):
-            self.last_frame = _unused
+            self._last_frame = True
         else:
-            self.last_frame = frame_img.copy()
+            self._last_frame = frame_img.copy()
 
         return cut_list
 
 
-    def post_process(self, start_frame: int, end_frame: int) -> List[DetectionEvent]:
+    def post_process(self, start_time: FrameTimecode, end_time: FrameTimecode) -> List[DetectionEvent]:
         """Performs any processing after the last frame has been read.
 
         TODO: Based on the parameters passed to the ContentDetector constructor,

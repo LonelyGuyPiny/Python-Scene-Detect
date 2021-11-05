@@ -68,7 +68,7 @@ class DetectionEvent:
     """
     kind: EventType
     time: FrameTimecode
-    context: Dict[str, Any]
+    context: Optional[Dict[str, Any]] = None
 
 
 class SceneDetector(ABC):
@@ -87,19 +87,17 @@ class SceneDetector(ABC):
         """Sets the StatsManager bound to this object, if any."""
         self._stats_manager = value
 
-    def is_processing_required(self, frame_num: int) -> bool:
+    def is_processing_required(self, timecode: FrameTimecode) -> bool:
         """Test if all calculations for a given frame are already done and stored in the
         associated StatsManager. Always True if there is no StatsManager.
 
         Returns:
             False if all calculations for timecode can be found in `stats_manager`, True otherwise.
-            If True, calling `process_frame` with the given timecode (`frame_num`)
-
-            the timecode passed to `process_frame is required
-            to be passed to process_frame for the given frame_num).
+            If True, calling `process_frame` with the given timecode (`frame_num`) requires
+            the `frame_im` argument to be a valid frame.
         """
         return not self.metrics or self.stats_manager or (not self.stats_manager.metrics_exist(
-            frame_num, self.metrics))
+            timecode.frame_num, self.metrics))
 
     @staticmethod
     @abstractmethod
@@ -124,7 +122,7 @@ class SceneDetector(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def process_frame(self, frame_num: int,
+    def process_frame(self, timecode: FrameTimecode,
                       frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
         """Computes/stores metrics and detects any scene changes.
 
@@ -137,7 +135,7 @@ class SceneDetector(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def post_process(self, start_frame: int, end_frame: int) -> List[DetectionEvent]:
+    def post_process(self, start_time: FrameTimecode, end_time: FrameTimecode) -> List[DetectionEvent]:
         """Performs any processing after the last frame has been read.
 
         Returns:

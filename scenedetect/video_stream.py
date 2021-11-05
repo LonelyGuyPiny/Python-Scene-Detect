@@ -144,7 +144,7 @@ class VideoStream(ABC):
         """Current position within stream as FrameTimecode.
 
         This can be interpreted as presentation time stamp, thus frame 1 corresponds
-        to the presentation time 0.  Returns 0 even if `frame_number` is 0."""
+        to the presentation time 0.  Returns 0 even if `frame_number` is 1."""
         raise NotImplementedError
 
     @property

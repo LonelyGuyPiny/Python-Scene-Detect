@@ -38,7 +38,8 @@ from typing import List, Optional
 
 import numpy
 
-from scenedetect.scene_detector import DetectionEvent, SceneDetector
+from scenedetect.frame_timecode import FrameTimecode
+from scenedetect.scene_detector import DetectionEvent, EventType, SceneDetector
 
 
 ##
@@ -120,7 +121,7 @@ class ThresholdDetector(SceneDetector):
         return self._metric_keys
 
 
-    def process_frame(self, frame_num: int, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:        # type: (int, Optional[numpy.ndarray]) -> List[int]
+    def process_frame(self, timecode: FrameTimecode, frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
         """
         Args:
             frame_num (int): Frame number of frame that is being passed.
@@ -131,6 +132,8 @@ class ThresholdDetector(SceneDetector):
             List[int]: List of frames where scene cuts have been detected. There may be 0
             or more frames in the list, and not necessarily the same as frame_num.
         """
+
+        frame_num = timecode.frame_num
 
         # Initialize last scene cut point at the beginning of the frames of interest.
         if self.last_scene_cut is None:
@@ -168,9 +171,18 @@ class ThresholdDetector(SceneDetector):
                     # Just faded into a new scene, compute timecode for the scene
                     # split based on the fade bias.
                     f_out = self.last_fade['frame']
-                    f_split = int((frame_num + f_out +
-                                   int(self.fade_bias * (frame_num - f_out))) / 2)
-                    cut_list.append(f_split)
+                    f_split = int((f_out + frame_num +
+                                  int(self.fade_bias * (frame_num - f_out))) / 2)
+                    # TODO(v1.0): Add a separate mode that just uses the threshold for start/stop
+                    # events rather than internally generating cuts.  Since fades of this nature
+                    # are only for ThresholdDetector, keep this abstraction internal.
+                    # Then can add a CLI switch to detect-threshold to either remove all time
+                    # below the threshold, or resort to old fade-bias style (set new default to
+                    # new behaviour since it is likely more useful for most cases).
+                    cut_list.append(DetectionEvent(
+                        kind=EventType.CUT,
+                        time=FrameTimecode(f_split, timecode)
+                    ))
                     self.last_scene_cut = frame_num
                 self.last_fade['type'] = 'in'
                 self.last_fade['frame'] = frame_num
@@ -184,7 +196,7 @@ class ThresholdDetector(SceneDetector):
         return cut_list
 
 
-    def post_process(self, start_frame: int, end_frame: int) -> List[DetectionEvent]:
+    def post_process(self, start_time: FrameTimecode, end_time: FrameTimecode) -> List[DetectionEvent]:
         """Writes a final scene cut if the last detected fade was a fade-out.
 
         Only writes the scene cut if add_final_scene is true, and the last fade

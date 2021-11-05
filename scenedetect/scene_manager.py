@@ -46,7 +46,7 @@ threshold values (or other algorithm options) are used.
 """
 
 from string import Template
-from typing import List, Tuple, Optional, Dict, Callable, Union
+from typing import Iterable, List, Tuple, Optional, Dict, Callable, Union
 import logging
 import math
 
@@ -58,7 +58,7 @@ from scenedetect.platform import (
     tqdm, get_and_create_path, get_csv_writer, get_cv2_imwrite_params)
 from scenedetect.video_stream import VideoStream
 from scenedetect.stats_manager import StatsManager, FrameMetricRegistered
-from scenedetect.scene_detector import SceneDetector, SparseSceneDetector
+from scenedetect.scene_detector import DetectionEvent, EventType, SceneDetector, SparseSceneDetector
 from scenedetect.thirdparty.simpletable import (
     SimpleTableCell, SimpleTableImage, SimpleTableRow, SimpleTable, HTMLPage)
 
@@ -468,10 +468,11 @@ class SceneManager(object):
     the optimal threshold values or other options for various detection algorithms.
     """
 
-    def __init__(self, stats_manager: Optional[StatsManager] = None):
+    def __init__(self, stats_manager: Optional[StatsManager] = None,
+        ):
         """TODO(v1.0): This class should own a StatsManager instead of taking an optional one.
-        Change `stats_manager` to to `store_stats: bool=False, and expose a new
-        `stats_manager` @property. from the SceneManager.
+        Expose a new `stats_manager` @property from the SceneManager, and either change the
+        `stats_manager` argument to to `store_stats: bool=False, or lazy-init one.
 
         TODO(v1.0): This class should own a VideoStream as well, instead of continually passing one
         to the detect_scenes method.  If concatenation is required, it can be implemented as a
@@ -487,10 +488,10 @@ class SceneManager(object):
 
         self._num_frames = 0
         # Position of video that was first passed to detect_scenes.
-        self._start_frame = None
+        self._start_pos = None
         self._base_timecode: Optional[FrameTimecode] = None
         self._downscale: int = 1
-        self._auto_downscale: bool = False
+        self._auto_downscale: bool = True
 
     @property
     def stats_manager(self) -> Optional[StatsManager]:
@@ -568,7 +569,7 @@ class SceneManager(object):
         self._cutting_list.clear()
         self._event_list.clear()
         self._num_frames = 0
-        self._start_frame = 0
+        self._start_pos = 0
 
     def clear_detectors(self) -> None:
         """ Removes all scene detectors added to the SceneManager via add_detector(). """
@@ -590,12 +591,12 @@ class SceneManager(object):
         """
         if base_timecode is None:
             base_timecode = self._base_timecode
-        if base_timecode is None or self._start_frame is None:
+        if base_timecode is None or self._start_pos is None:
             return []
         return sorted(
             self.get_event_list(base_timecode) + get_scenes_from_cuts(
                 self.get_cut_list(base_timecode), base_timecode, self._num_frames,
-                self._start_frame))
+                self._start_pos))
 
     def get_cut_list(self, base_timecode: FrameTimecode=None) -> List[FrameTimecode]:
         """ Returns a list of FrameTimecodes of the detected scene changes/cuts.
@@ -643,19 +644,20 @@ class SceneManager(object):
         return [(base_timecode + start, base_timecode + end) for start, end in self._event_list]
 
     def _process_frame(self,
-                       frame_num: int,
+                       timecode: FrameTimecode,
                        frame_im: Optional[np.ndarray],
                        callback: Callable[[Optional[np.ndarray]], None] = None):
         """ Adds any cuts detected with the current frame to the cutting list. """
         for detector in self._detector_list:
-            cuts = detector.process_frame(frame_num, frame_im)
+            cuts: Iterable[DetectionEvent] = detector.process_frame(timecode, frame_im)
+            cuts = [cut.time.frame_num for cut in cuts]
             if cuts and callback:
-                callback(frame_im, frame_num)
+                callback(frame_im, timecode.frame_num)
             self._cutting_list += cuts
         for detector in self._sparse_detector_list:
-            events = detector.process_frame(frame_num, frame_im)
+            events = detector.process_frame(timecode, frame_im)
             if events and callback:
-                callback(frame_im, frame_num)
+                callback(frame_im, timecode.frame_num)
             self._event_list += events
 
     def _is_processing_required(self, frame_num: int) -> bool:
@@ -665,10 +667,10 @@ class SceneManager(object):
             return True
         return all([detector.is_processing_required(frame_num) for detector in self._detector_list])
 
-    def _post_process(self, start_frame: int, end_frame: int):
+    def _post_process(self, start_time: FrameTimecode, end_time: FrameTimecode):
         """ Adds any remaining cuts to the cutting list after processing the last frame. """
         for detector in self._detector_list:
-            self._cutting_list += detector.post_process(start_frame=start_frame, end_frame=end_frame)
+            self._cutting_list += detector.post_process(start_time=start_time, end_time=end_time)
 
     def detect_scenes(self,
                       video: VideoStream,
@@ -697,9 +699,8 @@ class SceneManager(object):
                 a progress bar with the progress, framerate, and expected time to
                 complete processing the video frame source.
             callback ((image_ndarray, frame_num: int) -> None): If not None, called after
-                each scene/event detected.  Note that the signature of the callback will
-                undergo breaking changes in v0.6 to provide more context to the callback
-                (detector type, event type, etc... - see #177 for further details).
+                each scene/event detected.
+                TODO(v1.0): Update signature.
         Returns:
             int: Number of frames read and processed from the frame source.
         Raises:
@@ -718,8 +719,10 @@ class SceneManager(object):
 
         self._base_timecode = video.base_timecode
         start_frame_num: int = video.frame_number
-        if self._start_frame is None:
-            self._start_frame = start_frame_num
+
+        # TODO(v1.0): Remove the condition on frame_number being zero.
+        if self._start_pos is None and video.frame_number == 0:
+            self._start_pos = video.position
 
         if duration is not None:
             end_time = duration + start_frame_num
@@ -750,7 +753,6 @@ class SceneManager(object):
         if tqdm and show_progress:
             progress_bar = tqdm(total=int(total_frames), unit='frames', dynamic_ncols=True)
         try:
-            last_frame = 0
             frame_im = None
             while True:
                 # The following is a hack for ContentDetector since it requires frame deltas.
@@ -767,9 +769,9 @@ class SceneManager(object):
                     if video.read(decode=False) is False:
                         break
 
-                # Frames are internally indexed from 0 (i.e. the first frame is frame 0).
-                last_frame = video.frame_number - 1
-                self._process_frame(last_frame, frame_im, callback)
+                if self._start_pos is None:
+                    self._start_pos = video.position
+                self._process_frame(video.position, frame_im, callback)
 
                 if progress_bar:
                     progress_bar.update(1)
@@ -784,7 +786,7 @@ class SceneManager(object):
                 if end_time is not None and video.position >= end_time:
                     break
 
-            self._post_process(self._start_frame, last_frame)
+            self._post_process(start_time=self._start_pos, end_time=video.position)
 
         finally:
 
