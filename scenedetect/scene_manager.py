@@ -58,7 +58,7 @@ from scenedetect.platform import (
     tqdm, get_and_create_path, get_csv_writer, get_cv2_imwrite_params)
 from scenedetect.video_stream import VideoStream
 from scenedetect.stats_manager import StatsManager, FrameMetricRegistered
-from scenedetect.scene_detector import DetectionEvent, EventType, SceneDetector, SparseSceneDetector
+from scenedetect.scene_detector import DetectionEvent, EventType, SceneDetector
 from scenedetect.thirdparty.simpletable import (
     SimpleTableCell, SimpleTableImage, SimpleTableRow, SimpleTable, HTMLPage)
 
@@ -96,9 +96,7 @@ def compute_downscale_factor(frame_width: int, effective_width: int = DEFAULT_MI
     return frame_width // effective_width
 
 
-def get_scenes_from_cuts(cut_list, base_timecode, num_frames, start_frame=0):
-    # type: List[FrameTimecode], FrameTimecode, Union[int, FrameTimecode],
-    #       Optional[Union[int, FrameTimecode]] -> List[Tuple[FrameTimecode, FrameTimecode]]
+def get_scenes_from_cuts(cut_list: Iterable[FrameTimecode], start_frame: FrameTimecode, num_frames: int):
     """ Returns a list of tuples of start/end FrameTimecodes for each scene based on a
     list of detected scene cuts/breaks.
 
@@ -123,16 +121,16 @@ def get_scenes_from_cuts(cut_list, base_timecode, num_frames, start_frame=0):
     # Scene list, where scenes are tuples of (Start FrameTimecode, End FrameTimecode).
     scene_list = []
     if not cut_list:
-        scene_list.append((base_timecode + start_frame, base_timecode + start_frame + num_frames))
+        scene_list.append((start_frame, start_frame + num_frames))
         return scene_list
     # Initialize last_cut to the first frame we processed,as it will be
     # the start timecode for the first scene in the list.
-    last_cut = base_timecode + start_frame
+    last_cut = start_frame
     for cut in cut_list:
         scene_list.append((last_cut, cut))
         last_cut = cut
     # Last scene is from last cut to end of video.
-    scene_list.append((last_cut, base_timecode + start_frame + num_frames))
+    scene_list.append((last_cut, start_frame + num_frames))
 
     return scene_list
 
@@ -478,11 +476,8 @@ class SceneManager(object):
         to the detect_scenes method.  If concatenation is required, it can be implemented as a
         generic VideoStream wrapper.
         """
-        self._cutting_list: List[FrameTimecode] = []
-        self._event_list: List[Tuple[FrameTimecode]] = []
-        self._detector_list: List[SceneDetector] = []
-        # TODO(v1.0): Remove.
-        self._sparse_detector_list: List[SparseSceneDetector] = []
+        self._events: Dict[FrameTimecode, List[DetectionEvent]] = {}
+        self._detectors: List[SceneDetector] = []
 
         self._stats_manager: Optional[StatsManager] = stats_manager
 
@@ -492,6 +487,12 @@ class SceneManager(object):
         self._base_timecode: Optional[FrameTimecode] = None
         self._downscale: int = 1
         self._auto_downscale: bool = True
+
+    @property
+    def events(self) -> Dict[FrameTimecode, Iterable[DetectionEvent]]:
+        """Returns a dictionary of FrameTimecodes to DetectionEvents that have been found by the
+        attached detectors."""
+        return self._events
 
     @property
     def stats_manager(self) -> Optional[StatsManager]:
@@ -538,9 +539,6 @@ class SceneManager(object):
             detector (SceneDetector): Scene detector to add to the SceneManager.
         """
         if self.stats_manager is None and detector.stats_manager_required():
-            # Make sure the lists are empty so that the detectors don't get
-            # out of sync (require an explicit statsmanager instead)
-            assert not self._detector_list and not self._sparse_detector_list
             self._stats_manager = StatsManager()
 
         detector.stats_manager = self.stats_manager
@@ -553,124 +551,115 @@ class SceneManager(object):
             except FrameMetricRegistered:
                 pass
 
-        if not issubclass(type(detector), SparseSceneDetector):
-            self._detector_list.append(detector)
-        else:
-            self._sparse_detector_list.append(detector)
+        self._detectors.append(detector)
 
     def get_num_detectors(self) -> int:
         """ Gets number of registered scene detectors added via add_detector. """
-        return len(self._detector_list)
+        return len(self._detectors)
 
     def clear(self) -> None:
         """ Clears all cuts/scenes and resets the SceneManager's position.
 
         Any statistics generated are still saved in the bound StatsManager if any. """
-        self._cutting_list.clear()
-        self._event_list.clear()
+        self._events.clear()
         self._num_frames = 0
-        self._start_pos = 0
+        self._start_pos = None
+
 
     def clear_detectors(self) -> None:
         """ Removes all scene detectors added to the SceneManager via add_detector(). """
-        self._detector_list.clear()
-        self._sparse_detector_list.clear()
+        self._detectors.clear()
+
 
     def get_scene_list(
-        self, base_timecode: FrameTimecode=None) -> List[Tuple[FrameTimecode, FrameTimecode]]:
-        """Returns a list of tuples of start/end FrameTimecodes for each detected scene.
+        self, include_start: bool=True, include_end: bool=False) -> List[Tuple[FrameTimecode, FrameTimecode]]:
+        """Returns a list of tuples of start/end `FrameTimecodes` for each detected scene.
+        If multiple events are found on the same frame, only last event (i.e. most recent in the
+        processing pipeline) will be used.
 
-        The scene list is generated by combining the results of all sparse detectors with
-        those from dense ones (i.e. combining the results of :py:meth:`get_cut_list`
-        and :py:meth:`get_event_list`).
+        The scene list is generated by combining the results of all `EventType.CUT` events with
+        `EventType.IN`/`EventType.OUT` event pairs.
 
+        Arguments:
+            include_start: If True, includes the beginning of the video as the first scene.
+                If False, the first scene will be the first `EventType.IN` event.
+            include_end: If True, ensures the final portion of the video is always included as a
+                distinct scene. Equivalent to replacing the last event with `EventType.CUT`.
+.
         Returns:
-            List of tuples in the form (start_time, end_time), where both start_time and
-            end_time are FrameTimecode objects representing the exact time/frame where each
-            detected scene in the video begins and ends.
+            List of tuples in the form `(start_time, end_time)`, where start_time is the first
+            frame's presentation time stamp (PTS), and end_time is the last frame's PTS plus the
+            duration of the frame itself.
         """
-        if base_timecode is None:
-            base_timecode = self._base_timecode
-        if base_timecode is None or self._start_pos is None:
-            return []
-        return sorted(
-            self.get_event_list(base_timecode) + get_scenes_from_cuts(
-                self.get_cut_list(base_timecode), base_timecode, self._num_frames,
-                self._start_pos))
 
-    def get_cut_list(self, base_timecode: FrameTimecode=None) -> List[FrameTimecode]:
+        if not self._events:
+            return []
+
+        for _, events in self._events.items():
+            if any(not event.kind == EventType.CUT for event in events):
+                raise NotImplementedError("TODO(v1.0): Need to handle other event types.")
+
+
+        return get_scenes_from_cuts(self.get_cut_list(), self._start_pos, self._num_frames)
+
+
+    def get_cut_list(self,
+                     all_events: bool=False,
+                     inout_bias: Optional[float]=0.0) -> List[FrameTimecode]:
         """ Returns a list of FrameTimecodes of the detected scene changes/cuts.
 
-        Unlike get_scene_list, the cutting list returns a list of FrameTimecodes representing
-        the point in the input video(s) where a new scene was detected, and thus the frame
-        where the input should be cut/split. The cutting list, in turn, is used to generate
-        the scene list, noting that each scene is contiguous starting from the first frame
-        and ending at the last frame detected.
-
-        If only sparse detectors are used (e.g. MotionDetector), this will always be empty.
+        Arguments:
+            all_events: If True, uses all event types as cuts. How this is done is controlled by
+                the remaining parameters. If False, ignores all events that are not of type
+                EventType.CUT, and also ignores all other arguments to this method.
+            in_out_bias: If None, generates a cut at every type of event. Otherwise, must be a float
+                between -1.0 and +1.0 which represents the relative position of where the cut will
+                be placed between the last EventType.OUT and EventType.IN, with -1.0 closest to the
+                OUT event and +1.0 closest to the EventType.IN event. The default is 0.0, placing
+                the cut in the middle of both events.
 
         Returns:
             List of FrameTimecode objects denoting the points in time where a scene change
             was detected in the input video(s), which can also be passed to external tools
             for automated splitting of the input into individual scenes.
         """
-        if base_timecode is None:
-            base_timecode = self._base_timecode
-        if base_timecode is None:
-            return []
-        return [FrameTimecode(cut, base_timecode) for cut in self._get_cutting_list()]
-
-    def _get_cutting_list(self):
-        # type: () -> list
-        """ Returns a sorted list of unique frame numbers of any detected scene cuts. """
-        # We remove duplicates here by creating a set then back to a list and sort it.
-        return sorted(list(set(self._cutting_list)))
-
-    def get_event_list(self, base_timecode=None):
-        # type: (FrameTimecode) -> List[FrameTimecode]
-        """ Returns a list of FrameTimecode pairs of the detected scenes by all sparse detectors.
-
-        Unlike get_scene_list, the event list returns a list of FrameTimecodes representing
-        the point in the input video(s) where a new scene was detected only by sparse
-        detectors, otherwise it is the same.
-
-        Returns:
-            List of pairs of FrameTimecode objects denoting the detected scenes.
-        """
-        if base_timecode is None:
-            base_timecode = self._base_timecode
-        if base_timecode is None:
-            return []
-        return [(base_timecode + start, base_timecode + end) for start, end in self._event_list]
+        if not all_events:
+            return [
+                event_time for event_time in sorted(self._events)
+                if any(event.kind == EventType.CUT for event in self._events[event_time])
+            ]
+        raise NotImplementedError("TODO(v1.0)")
 
     def _process_frame(self,
                        timecode: FrameTimecode,
                        frame_im: Optional[np.ndarray],
-                       callback: Callable[[Optional[np.ndarray]], None] = None):
+                       callback: Callable[[Optional[np.ndarray], int], None] = None):
         """ Adds any cuts detected with the current frame to the cutting list. """
-        for detector in self._detector_list:
-            cuts: Iterable[DetectionEvent] = detector.process_frame(timecode, frame_im)
-            cuts = [cut.time.frame_num for cut in cuts]
-            if cuts and callback:
-                callback(frame_im, timecode.frame_num)
-            self._cutting_list += cuts
-        for detector in self._sparse_detector_list:
-            events = detector.process_frame(timecode, frame_im)
+        for detector in self._detectors:
+            events: Iterable[DetectionEvent] = detector.process_frame(timecode, frame_im)
+            self._add_events(events)
             if events and callback:
+                # TODO(v1.0): Expand context passed to callback.
                 callback(frame_im, timecode.frame_num)
-            self._event_list += events
+
+    def _add_events(self, events: Iterable[DetectionEvent]):
+        for event in events:
+            if not event.time in self._events:
+                self._events[event.time] = []
+            self._events[event.time] += [event]
 
     def _is_processing_required(self, frame_num: int) -> bool:
         """ Is Processing Required: Returns True if frame metrics not in StatsManager,
         False otherwise. """
         if self.stats_manager is None:
             return True
-        return all([detector.is_processing_required(frame_num) for detector in self._detector_list])
+        return all([detector.is_processing_required(frame_num) for detector in self._detectors])
 
     def _post_process(self, start_time: FrameTimecode, end_time: FrameTimecode):
         """ Adds any remaining cuts to the cutting list after processing the last frame. """
-        for detector in self._detector_list:
-            self._cutting_list += detector.post_process(start_time=start_time, end_time=end_time)
+        for detector in self._detectors:
+            events = detector.post_process(start_time=start_time, end_time=end_time)
+            self._add_events(events)
 
     def detect_scenes(self,
                       video: VideoStream,
@@ -785,7 +774,6 @@ class SceneManager(object):
 
                 if end_time is not None and video.position >= end_time:
                     break
-
             self._post_process(start_time=self._start_pos, end_time=video.position)
 
         finally:
