@@ -79,10 +79,10 @@ def contains_sequence_or_url(video_path: str) -> bool:
 def check_split_video_requirements(use_mkvmerge: bool) -> None:
     # type: (bool) -> None
     """ Validates that the proper tool is available on the system to perform the split-video
-    command, which depends on if -c/--copy is set (to use mkvmerge) or not (to use ffmpeg).
+    command, which depends on if -m/--mkvmerge is set (if not, defaults to ffmpeg).
 
     Arguments:
-        use_mkvmerge: True if -c/--copy is set, False otherwise.
+        use_mkvmerge: True if -m/--mkvmerge is set, False otherwise.
 
     Raises: click.BadParameter if the proper video splitting tool cannot be found.
     """
@@ -91,13 +91,13 @@ def check_split_video_requirements(use_mkvmerge: bool) -> None:
         error_strs = [
             "{EXTERN_TOOL} is required for split-video{EXTRA_ARGS}.".format(
                 EXTERN_TOOL='mkvmerge' if use_mkvmerge else 'ffmpeg',
-                EXTRA_ARGS=' -c/--copy' if use_mkvmerge else '')
+                EXTRA_ARGS=' -m/--mkvmerge' if use_mkvmerge else '')
         ]
         error_strs += ["Install one of the above tools to enable the split-video command."]
         if not use_mkvmerge and is_mkvmerge_available():
-            error_strs += ['You can also specify `-c/--copy` to use mkvmerge for splitting.']
+            error_strs += ['You can also specify `-m/--mkvmerge` to use mkvmerge for splitting.']
         elif use_mkvmerge and is_ffmpeg_available():
-            error_strs += ['You can also omit `-c/--copy` to use ffmpeg for splitting.']
+            error_strs += ['You can also specify `-c/--copy` to use ffmpeg stream copying.']
         error_str = '\n'.join(error_strs)
         raise click.BadParameter(error_str, param_hint='split-video')
 
@@ -143,8 +143,8 @@ class CliContext(object):
         self.image_directory: str = None  # save-images -o/--output
         self.image_param: int = None      # save-images -q/--quality if -j/-w,
                                           #   otherwise -c/--compression if -p
-                                          # save-images -f/--name-format
-        self.image_name_format: str = '$VIDEO_NAME-Scene-$SCENE_NUMBER-$IMAGE_NUMBER'
+        self.image_name_format: str = (   # save-images -f/--name-format
+            '$VIDEO_NAME-Scene-$SCENE_NUMBER-$IMAGE_NUMBER')
         self.num_images: int = 3          # save-images -n/--num-images
         self.frame_margin: int = 1        # save-images -m/--frame-margin
         self.scale: float = None          # save-images -s/--scale
@@ -153,11 +153,11 @@ class CliContext(object):
 
         # `split-video` Command Options
         self.split_video: bool = False
-        self.split_mkvmerge: bool = False # split-video -c/--copy
-        self.split_args: str = None       # split-video -a/--override-args
+        self.split_mkvmerge: bool = False # split-video -m/--mkvmerge
+        self.split_args: str = None       # split-video -a/--override-args, -c/--copy
         self.split_directory: str = None  # split-video -o/--output
-                                          # split-video -f/--filename
-        self.split_name_format: str = '$VIDEO_NAME-Scene-$SCENE_NUMBER'
+        self.split_name_format: str = (   # split-video -f/--filename
+            '$VIDEO_NAME-Scene-$SCENE_NUMBER')
         self.split_quiet: bool = False    # split-video -q/--quiet
 
         # `list-scenes` Command Options
@@ -174,6 +174,9 @@ class CliContext(object):
         self.html_include_images: bool = True # export-html --no-images
         self.image_width: int = None          # export-html -w/--image-width
         self.image_height: int = None         # export-html -h/--image-height
+
+        # Internal variables
+        self._check_input_open_failed = False   # Used to avoid excessive log messages
 
     def parse_options(self, input_path: str, framerate: float, stats_file: Optional[str],
                       downscale: Optional[int], frame_skip: int, min_scene_len: int,
@@ -319,8 +322,10 @@ class CliContext(object):
             click.BadParameter
         """
         if self.video_stream is None:
-            self.logger.error("-i/--input [VIDEO] must be specified before any commands.")
-            raise click.BadParameter('No input specified.', param_hint='input video')
+            if not self._check_input_open_failed:
+                self.logger.error('Error: No input video was specified.')
+            self._check_input_open_failed = True
+            raise click.BadParameter('Input video not set.', param_hint='-i/--input')
 
     def add_detector(self, detector):
         """ Add Detector: Adds a detection algorithm to the CliContext's SceneManager. """

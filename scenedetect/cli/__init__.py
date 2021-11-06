@@ -640,12 +640,12 @@ def list_scenes_command(ctx, output, filename, no_output_file, quiet, skip_cuts)
     type=click.Path(exists=False, dir_okay=True, writable=True, resolve_path=False), help=
     'Output directory to save videos to. Overrides global option -o/--output if set.')
 @click.option(
-    '--filename', '-f', metavar='NAME', default='$VIDEO_NAME-Scene-$SCENE_NUMBER',
+    '--filename', '-f', metavar='NAME', default=None,
     type=click.STRING, show_default=True, help= # TODO(v1.0): Change macros to {}s?
-    'File name format to use when saving videos (with or without'
-    ' extension). You can use the $VIDEO_NAME and $SCENE_NUMBER macros'
-    ' in the filename (e.g.).'
-    ' Note that you may have to wrap the format in single quotes.')
+    'File name format to use when saving videos (with or without extension). You can use the'
+    ' $VIDEO_NAME and $SCENE_NUMBER macros in the filename (e.g. $VIDEO_NAME-Part-$SCENE_NUMBER).'
+    ' Note that you may have to wrap the format in single quotes to avoid variable expansion.'
+    ' [default: $VIDEO_NAME-Scene-$SCENE_NUMBER]')
 @click.option(
     '--high-quality', '-hq',
     is_flag=True, flag_value=True, help=
@@ -656,8 +656,8 @@ def list_scenes_command(ctx, output, filename, no_output_file, quiet, skip_cuts)
     type=click.STRING, help=
     'Override codec arguments/options passed to FFmpeg when splitting and re-encoding'
     ' scenes. Use double quotes (") around specified arguments. Must specify at least'
-    ' audio/video codec to use (e.g. -a "-c:v [...] and -c:a [...]"). [default:'
-    ' "-c:v libx264 -preset veryfast -crf 22 -c:a aac"]')
+    ' audio/video codec to use (e.g. -a "-c:v [...] -c:a [...]").'
+    ' [default: "-c:v libx264 -preset veryfast -crf 22 -c:a aac"]')
 @click.option(
     '--quiet', '-q',
     is_flag=True, flag_value=True, help=
@@ -665,18 +665,22 @@ def list_scenes_command(ctx, output, filename, no_output_file, quiet, skip_cuts)
 @click.option(
     '--copy', '-c',
     is_flag=True, flag_value=True, help=
-    'Copy instead of re-encode using mkvmerge. All other options except'
-    ' -o/--output and -q/--quiet are ignored in this mode.'
-    ' Significantly faster, but far less precise. Output files will be'
-    ' named $VIDEO_NAME-$SCENE_NUMBER.mkv.')
+    'Copy instead of re-encode. Much faster, but less precise. Equivalent to specifying'
+    ' -a "-c:v copy -c:a copy".')
 @click.option(
-    '--rate-factor', '-crf', metavar='RATE', default=None,
+    '--mkvmerge', '-m',
+    is_flag=True, flag_value=True, help=
+    'Split the video using mkvmerge. Faster than re-encoding, but less precise. The output will'
+    ' be named $VIDEO_NAME-$SCENE_NUMBER.mkv (specifying -f/--filename with -m/--mkvmerge is an'
+    ' error). If set, all options other than -q/--quiet and -o/--output will be ignored.')
+@click.option(
+    '--rate-factor', '-crf', metavar='RATE', default=None, show_default=False,
     type=click.IntRange(0, 100), help=
     'Video encoding quality (x264 constant rate factor), from 0-100, where lower'
     ' values represent better quality, with 0 indicating lossless.'
     ' [default: 22, if -hq/--high-quality is set: 17]')
 @click.option(
-    '--preset', '-p', metavar='LEVEL', default=None,
+    '--preset', '-p', metavar='LEVEL', default=None, show_default=False,
     type=click.Choice([
         'ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium',
         'slow', 'slower', 'veryslow']),
@@ -687,43 +691,80 @@ def list_scenes_command(ctx, output, filename, no_output_file, quiet, skip_cuts)
     ' [default: veryfast, if -hq/--high quality is set: slow]')
 @click.pass_context
 def split_video_command(ctx, output, filename, high_quality, override_args, quiet, copy,
-                        rate_factor, preset):
+                        mkvmerge, rate_factor, preset):
     """Split input video(s) using ffmpeg or mkvmerge."""
     if ctx.obj.split_video:
         duplicate_command(ctx, 'split-video')
     ctx.obj.check_input_open()
-    check_split_video_requirements(copy)
+    check_split_video_requirements(use_mkvmerge=mkvmerge)
 
     if contains_sequence_or_url(ctx.obj.video_stream.path):
         ctx.obj.options_processed = False
         error_str = 'The save-images command is incompatible with image sequences/URLs.'
-        ctx.obj.logger.error(error_str)
         raise click.BadParameter(error_str, param_hint='save-images')
 
+    ##
+    ## Common Arguments/Options
+    ##
     ctx.obj.split_video = True
     ctx.obj.split_quiet = True if quiet else False
     ctx.obj.split_directory = output
-    ctx.obj.split_name_format = filename
-    if copy:
-        ctx.obj.split_mkvmerge = True
+    if ctx.obj.split_directory is not None:
+        ctx.obj.logger.info('Video output path set:  \n%s', ctx.obj.split_directory)
+
+    # Disallow certain combinations of flags.
+    if mkvmerge or copy:
+        command = '-m/--mkvmerge' if mkvmerge else '-c/--copy'
         if high_quality:
-            ctx.obj.logger.warning('-hq/--high-quality flag ignored due to -c/--copy.')
+            raise click.BadParameter(
+                '-hq/--high-quality cannot be specified with {command}'.format(command=command),
+                param_hint='split_video')
         if override_args:
-            ctx.obj.logger.warning('-f/--ffmpeg-args option ignored due to -c/--copy.')
-    if not override_args:
+            raise click.BadParameter(
+                '-a/--override-args cannot be specified with {command}'.format(command=command),
+                param_hint='split_video')
+        if rate_factor:
+            raise click.BadParameter(
+                '-crf/--rate-factor cannot be specified with {command}'.format(command=command),
+                param_hint='split_video')
+        if preset:
+            raise click.BadParameter(
+                '-p/--preset cannot be specified with {command}'.format(command=command),
+                param_hint='split_video')
+    ##
+    ## mkvmerge-Specific Arguments/Options
+    ##
+    if mkvmerge:
+        if filename:
+            raise click.BadParameter('-f/--filename cannot be specified with -m/--mkvmerge',
+                                     param_hint='split_video')
+        if copy:
+            ctx.obj.logger.warning('-c/--copy flag ignored due to -m/--mkvmerge.')
+        ctx.obj.split_mkvmerge = True
+        ctx.obj.logger.info('Using mkvmerge for video splitting.')
+        return
+
+    ##
+    ## ffmpeg-Specific Arguments/Options
+    ##
+    ctx.obj.split_name_format = '$VIDEO_NAME-Scene-$SCENE_NUMBER' if filename is None else filename
+    # TODO: Should add some validation of the name format to ensure it contains at least one variable,
+    # otherwise the output will just keep getting overwritten.
+
+    if copy:
+        override_args = '-c:v copy -c:a copy'
+    elif not override_args:
         if rate_factor is None:
             rate_factor = 22 if not high_quality else 17
         if preset is None:
             preset = 'veryfast' if not high_quality else 'slow'
         override_args = ('-c:v libx264 -preset {PRESET} -crf {RATE_FACTOR} -c:a aac'.format(
             PRESET=preset, RATE_FACTOR=rate_factor))
-    if not copy:
-        ctx.obj.logger.info('FFmpeg codec args set: %s', override_args)
-    if filename:
-        ctx.obj.logger.info('Video output file name format: %s', filename)
-    if ctx.obj.split_directory is not None:
-        ctx.obj.logger.info('Video output path set:  \n%s', ctx.obj.split_directory)
+
+    ctx.obj.logger.info('ffmpeg arguments: %s', override_args)
     ctx.obj.split_args = override_args
+    if filename:
+        ctx.obj.logger.info('Output file name format: %s', filename)
 
 
 
