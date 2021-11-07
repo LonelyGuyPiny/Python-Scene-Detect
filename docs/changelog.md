@@ -27,6 +27,8 @@ PySceneDetect Releases
  * [api] The `StatsManager` load/save methods now accept a path or an open file handle
  * [api] The video splitting functions no longer support multiple input videos for concatenation (`scenedetect.video_splitter`)
  * [api] The `SceneManager.detect_scenes()` method no longer displays a progress bar *by default* (set `show_progress=True` to restore the previous behaviour)
+ * [bugfix] Fix `detect-adaptive` not respecting `--drop-short-scenes`
+ * [cli] Remove `-m`/`--min-scene-len` from `detect-adaptive` (use the global option instead)
 
  * [cli] `split-video` behaviour changes:
      * The `-c`/`--copy` flag now uses `ffmpeg` stream copying mode instead of `mkvmerge`

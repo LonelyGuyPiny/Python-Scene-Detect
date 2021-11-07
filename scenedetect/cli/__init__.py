@@ -427,12 +427,6 @@ def detect_content_command(ctx, threshold, luma_only):
     'Threshold value (float) that the calculated frame score must exceed to'
     ' trigger a new scene (see frame metric adaptive_ratio in stats file).')
 @click.option(
-    '--min-scene-len', '-m', metavar='TIMECODE',
-    type=click.STRING, default="0.6s", show_default=True, help=
-    'Minimum size/length of any scene. TIMECODE can be specified as exact'
-    ' number of frames, a time in seconds followed by s, or a timecode in the'
-    ' format HH:MM:SS or HH:MM:SS.nnn')
-@click.option(
     '--min-delta-hsv', '-d', metavar='VAL',
     type=click.FLOAT, default=15.0, show_default=True, help=
     'Minimum threshold (float) that the content_val must exceed in order to register as a new'
@@ -447,7 +441,7 @@ def detect_content_command(ctx, threshold, luma_only):
     is_flag=True, flag_value=True, help=
     'Only consider luma/brightness channel (useful for greyscale videos).')
 @click.pass_context
-def detect_adaptive_command(ctx, threshold, min_scene_len, min_delta_hsv,
+def detect_adaptive_command(ctx, threshold, min_delta_hsv,
                             frame_window, luma_only):
     """ Perform adaptive detection algorithm on input video(s).
 
@@ -456,7 +450,7 @@ def detect_adaptive_command(ctx, threshold, min_scene_len, min_delta_hsv,
     detect-adaptive --threshold 3.2
     """
     ctx.obj.check_input_open()
-    min_scene_len = parse_timecode(min_scene_len, ctx.obj.video_stream.frame_rate)
+    min_scene_len = 0 if ctx.obj.drop_short_scenes else ctx.obj.min_scene_len
     luma_mode_str = '' if not luma_only else ', luma_only mode'
 
     ctx.obj.logger.debug('Adaptively detecting content, parameters:\n'
