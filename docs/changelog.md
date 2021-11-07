@@ -8,7 +8,8 @@ PySceneDetect Releases
 
 #### Release Notes
 
- * Support for Python 2.7 has been dropped, new minimum Python version is 3.6
+ * Support for Python 2.7 has been dropped, new minimum supported Python version is 3.6
+ * Support for OpenCV 2.x has been dropped, new minimum OpenCV version is 3.x
  * First major API update and internal with significant changes from v0.5.x, feedback on the new design is welcome
  * Due to the significant amount of API changes, it is recommended to look at the updated quickstart & API examples in the manual
  * Adds support for multiple video backends to improve both performance and accuracy

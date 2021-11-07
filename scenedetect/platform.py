@@ -68,22 +68,6 @@ except ModuleNotFoundError:
 # pylint: enable=unused-import
 # pylint: enable=invalid-name
 
-# TODO(v1.0): Do we still need this?
-# Compatibility fix for OpenCV v2.x (copies CAP_PROP_* properties from the
-# cv2.cv namespace to the cv2 namespace, as the cv2.cv namespace was removed
-# with the release of OpenCV 3.0).
-# pylint: disable=no-member
-if not 'CAP_PROP_FPS' in dir(cv2):
-    cv2.CAP_PROP_FRAME_WIDTH = cv2.cv.CV_CAP_PROP_FRAME_WIDTH
-    cv2.CAP_PROP_FRAME_HEIGHT = cv2.cv.CV_CAP_PROP_FRAME_HEIGHT
-    cv2.CAP_PROP_FPS = cv2.cv.CV_CAP_PROP_FPS
-    cv2.CAP_PROP_POS_MSEC = cv2.cv.CV_CAP_PROP_POS_MSEC
-    cv2.CAP_PROP_POS_FRAMES = cv2.cv.CV_CAP_PROP_POS_FRAMES
-    cv2.CAP_PROP_FRAME_COUNT = cv2.cv.CV_CAP_PROP_FRAME_COUNT
-    cv2.CAP_PROP_FOURCC = cv2.cv.CV_CAP_PROP_FOURCC
-    cv2.INTER_CUBIC = cv2.cv.INTER_CUBIC
-# pylint: enable=no-member
-
 
 def get_aspect_ratio(cap: cv2.VideoCapture, epsilon: float = 0.01) -> float:
     """ Compatibility fix for OpenCV < v3.4.1 to get the aspect ratio
