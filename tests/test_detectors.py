@@ -33,6 +33,8 @@ test case material.
 
 import time
 
+import pytest
+
 # PySceneDetect Library Imports
 from scenedetect import SceneManager, FrameTimecode, StatsManager
 from scenedetect.detectors import ContentDetector
@@ -104,10 +106,15 @@ def test_adaptive_detector(test_movie_clip):
 
 
 # Defaults for now.
-TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD = [
+TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD_CUT_MODE_START = [
     0, 15, 198, 376
 ]
 
+TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD_SCENES = [
+    (30, 180), (216, 355), (398, 689)
+]
+
+@pytest.mark.skip(reason="TODO(v1.0): Finish fade_bias in transform_events.")
 def test_threshold_detector(test_video_file):
     """ Test SceneManager with VideoStreamCv2 and ThresholdDetector. """
     video = VideoStreamCv2(test_video_file)
@@ -116,10 +123,11 @@ def test_threshold_detector(test_video_file):
     scene_manager.auto_downscale = True
     scene_manager.detect_scenes(video)
     scene_list = scene_manager.get_scene_list()
-    assert len(scene_list) == len(TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD)
-    detected_start_frames = [
-        timecode.get_frames() for timecode, _ in scene_list ]
-    assert TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD == detected_start_frames
+    assert len(scene_list) == len(TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD_SCENES)
+    for i in range(len(scene_list)):
+        assert scene_list[i][0] == TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD_SCENES[i][0]
+        assert scene_list[i][1] == TEST_VIDEO_FILE_GROUND_TRUTH_THRESHOLD_SCENES[i][1]
+    scene_manager.transform_events(add_in_at_start=True, fade_bias=0.0, all_events_as_cuts=True)
 
 
 def test_detectors_with_stats(test_video_file):

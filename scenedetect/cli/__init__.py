@@ -468,13 +468,29 @@ def detect_adaptive_command(ctx, threshold, min_delta_hsv,
         luma_only=luma_only))
 
 
-
+# TODO(v1.0): -ta/-tb/-e/-f/-l should be part of a new command called post-process.
+# Leave it like this until detect-motion is working and has tests though. It should
+# also include min scene len. The values for all of the options there should be
+# configurable with a config file eventually.
 @click.command('detect-threshold')
 @click.option(
     '--threshold', '-t', metavar='VAL',
     type=click.IntRange(0, 255), default=12, show_default=True, help=
     'Threshold value (integer) that the delta_rgb frame metric must exceed to trigger a new scene.'
     ' Refers to frame metric delta_rgb in stats file.')
+@click.option(
+    '--time-before', '-tb', metavar='TIMECODE',
+    type=click.STRING, default='0.2s', show_default=True, help=
+    'Amount of time to include before any IN events.')
+@click.option(
+    '--time-after', '-ta', metavar='TIMECODE',
+    type=click.STRING, default='0.2s', show_default=True, help=
+    'Amount of time to include after any OUT events.')
+@click.option(
+    '--emit-cuts', '-e',
+    is_flag=True, flag_value=True, help=
+    'Emits cut events instead of in/out events. The location of each cut is controlled by the'
+    ' -f/--fade-bias option.')
 @click.option(
     '--fade-bias', '-f', metavar='PERCENT',
     type=click.IntRange(-100, 100), default=0, show_default=True, help=
@@ -483,20 +499,11 @@ def detect_adaptive_command(ctx, threshold, min_delta_hsv,
 @click.option(
     '--add-last-scene', '-l',
     is_flag=True, flag_value=True, help=
-    'If set, if the video ends on a fade-out, an additional scene will be generated for the'
-    ' last fade out position.')
-@click.option(
-    '--min-percent', '-p', metavar='PERCENT',
-    type=click.IntRange(0, 100), default=95, show_default=True, help=
-    'Percent (%) from 0 to 100 of amount of pixels that must meet the threshold value in order'
-    'to trigger a scene change.')
-@click.option(
-    '--block-size', '-b', metavar='N',
-    type=click.IntRange(1, 128), default=8, show_default=True, help=
-    'Number of rows in image to sum per iteration (can be tuned for performance in some cases).')
+    'If set and the last event was a fade-out, a final scene will be generated from the fade-out'
+    ' position until the end of the video. Only applicable if -e/--emit-cuts is specified.')
 @click.pass_context
-def detect_threshold_command(ctx, threshold, fade_bias, add_last_scene,
-                             min_percent, block_size):
+def detect_threshold_command(ctx, threshold, time_before, time_after, emit_cuts, fade_bias,
+                             add_last_scene):
     """  Perform threshold detection algorithm on input video(s).
 
     detect-threshold
@@ -506,21 +513,34 @@ def detect_threshold_command(ctx, threshold, fade_bias, add_last_scene,
 
     min_scene_len = 0 if ctx.obj.drop_short_scenes else ctx.obj.min_scene_len
 
-    ctx.obj.logger.debug('Detecting threshold, parameters:\n'
-                  '  threshold: %d, min-scene-len: %d, fade-bias: %d,\n'
-                  '  add-last-scene: %s, min-percent: %d, block-size: %d',
-                  threshold, min_scene_len, fade_bias,
-                  'yes' if add_last_scene else 'no', min_percent, block_size)
+    ctx.obj.logger.debug(
+        'Detecting threshold, parameters:\n'
+        '  threshold: {threshold}, min_scene_len: {min_scene_len}, time_before: {time_before},'
+        ' time_after: {time_after}, emit_cuts: {emit_cuts}, fade_bias: {fade_bias},'
+        ' add_last_scene: {add_last_scene}'.format(
+            threshold=threshold,
+            min_scene_len=min_scene_len,
+            time_before=time_before,
+            time_after=time_after,
+            emit_cuts=emit_cuts,
+            fade_bias=fade_bias,
+            add_last_scene=add_last_scene))
 
-    # Handle case where add_last_scene is not set and is None.
-    add_last_scene = True if add_last_scene else False
-
-    # Convert min_percent and fade_bias from integer to floats (0.0-1.0 and -1.0-+1.0 respectively).
-    min_percent /= 100.0
+    # Convert fade_bias from integer to float (range should be -1.0 to +1.0, inclusive).
     fade_bias /= 100.0
-    ctx.obj.add_detector(scenedetect.detectors.ThresholdDetector(
-        threshold=threshold, min_scene_len=min_scene_len, fade_bias=fade_bias,
-        add_final_scene=add_last_scene, block_size=block_size))
+
+    time_before = parse_timecode(time_before, ctx.obj.video_stream.frame_rate)
+    time_after = parse_timecode(time_after, ctx.obj.video_stream.frame_rate)
+
+    ctx.obj.add_detector(
+        scenedetect.detectors.ThresholdDetector(
+            threshold=threshold,
+            min_scene_len=min_scene_len,
+            time_before=time_before,
+            time_after=time_after,
+            cut_mode=emit_cuts,
+            fade_bias=fade_bias,
+            add_cut_on_last_out=add_last_scene))
 
 
 

@@ -721,6 +721,12 @@ class SceneManager(object):
                     for event in self._events[timecode]
                 ]
 
+        # Cleanup the event list by removing all blank list keys.
+        # This needs to be done before handling `min_event_spacing` below as it uses
+        # the event dict keys to determine the gaps between events.
+        for key in [timecode for timecode in self._events if not self._events[timecode]]:
+            del self._events[key]
+
         # Handle min_event_spacing.
         if min_event_spacing > 0:
             # Remove all events on frames where the distance from any previous event is
@@ -733,12 +739,6 @@ class SceneManager(object):
                         del self._events[timecode]
                     else:
                         last_timecode = timecode
-
-
-        # Cleanup the event list by removing all blank list keys.
-        for key in [timecode for timecode in self._events if not self._events[timecode]]:
-            del self._events[key]
-
 
 
     def _process_frame(self,

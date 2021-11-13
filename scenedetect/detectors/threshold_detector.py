@@ -33,7 +33,7 @@ This detector is available from the command-line interface by using the
 `detect-threshold` command.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy
 
@@ -73,45 +73,38 @@ class ThresholdDetector(SceneDetector):
     Attributes:
         threshold:  8-bit intensity value that each pixel value (R, G, and B)
             must be <= to in order to trigger a fade in/out.
+
+        TODO(v1.0): The following arguments are being moved to `SceneManager.transform_events`:
         min_scene_len:  FrameTimecode object or integer greater than 0 of the
             minimum length, in frames, of a scene (or subsequent scene cut).
-        fade_bias:  Float between -1.0 and +1.0 representing the percentage of
-            timecode skew for the start of a scene (-1.0 causing a cut at the
-            fade-to-black, 0.0 in the middle, and +1.0 causing the cut to be
-            right at the position where the threshold is passed).
-        add_final_scene:  Boolean indicating if the video ends on a fade-out to
-            generate an additional scene at this timecode.
-        block_size:  Number of rows in the image to sum per iteration (can be
-            tuned to increase performance in some cases; should be computed
-            programmatically in the future).
+        time_before: FrameTimecode representing max. amount to shift each IN event backwards
+            in time by (default is None for no shift).
+        time_after: FrameTimecode representing amount of time to shift each OUT event forwards
+            in time by (default is None for no shift).
+        cut_mode: If True, will emit `EventType.CUT` events instead of `EventType.IN`
+            and `EventType.OUT` events.
     """
 
     THRESHOLD_VALUE_KEY = 'delta_rgb'
 
     def __init__(self,
-                 threshold=12,
-                 min_scene_len=15,
-                 fade_bias=0.0,
-                 add_final_scene=False,
-                 block_size=8):
+                 threshold: int = 12,
+                 min_scene_len: Union[int, FrameTimecode] = 15,
+                 time_before: Optional[FrameTimecode] = None,
+                 time_after: Optional[FrameTimecode] = None,
+                 cut_mode: bool = False,
+                 fade_bias: Optional[float] = 0.0,
+                 add_cut_on_last_out=False):
         """Initializes threshold-based scene detector object."""
 
         super().__init__()
-        self.threshold = int(threshold)
-        self.fade_bias = fade_bias
-        self.min_scene_len = min_scene_len
-        self.processed_frame = False
-        self.last_scene_cut = None
-        # Whether to add an additional scene or not when ending on a fade out
-        # (as cuts are only added on fade ins; see post_process() for details).
-        self.add_final_scene = add_final_scene
-        # Where the last fade (threshold crossing) was detected.
-        self.last_fade = {
-            'frame': 0,  # frame number where the last detected fade is
-            'type': None  # type of fade, can be either 'in' or 'out'
-        }
-        self.block_size = block_size
+        # TODO(v1.0): Allow negative values for threshold to indicate the opposite (e.g. output only frames that
+        # the threshold is below instead of above), e.g. if set to -10, will output an IN event
+        # when the average frame value goes under 10, and will output an OUT when it goes back above.
+        # TODO(v1.0): Make it a float.
+        self._threshold = int(threshold)
         self._metric_keys = [ThresholdDetector.THRESHOLD_VALUE_KEY]
+        self._last_frame_avg = None
 
     @staticmethod
     def stats_manager_required() -> bool:
@@ -123,91 +116,31 @@ class ThresholdDetector(SceneDetector):
 
     def process_frame(self, timecode: FrameTimecode,
                       frame_img: Optional[numpy.ndarray]) -> List[DetectionEvent]:
-        """
-        Args:
-            frame_num (int): Frame number of frame that is being passed.
-            frame_img (numpy.ndarray or None): Decoded frame image (numpy.ndarray) to perform
-                scene detection with. Can be None *only* if the self.is_processing_required()
-                method (inhereted from the base SceneDetector class) returns True.
-        Returns:
-            List[int]: List of frames where scene cuts have been detected. There may be 0
-            or more frames in the list, and not necessarily the same as frame_num.
-        """
-
+        # Calculate the current frame's average value.
         frame_num = timecode.frame_num
-
-        # Initialize last scene cut point at the beginning of the frames of interest.
-        if self.last_scene_cut is None:
-            self.last_scene_cut = frame_num
-
-        # Compare the # of pixels under threshold in current_frame & last_frame.
-        # If absolute value of pixel intensity delta is above the threshold,
-        # then we trigger a new scene cut/break.
-
-        # List of cuts to return.
-        cut_list = []
-
-        # The metric used here to detect scene breaks is the percent of pixels
-        # less than or equal to the threshold; however, since this differs on
-        # user-supplied values, we supply the average pixel intensity as this
-        # frame metric instead (to assist with manually selecting a threshold)
         if (self.stats_manager is not None) and (self.stats_manager.metrics_exist(
                 frame_num, self._metric_keys)):
-            frame_avg = self.stats_manager.get_metrics(frame_num, self._metric_keys)[0]
+            curr_frame_avg = self.stats_manager.get_metrics(frame_num, self._metric_keys)[0]
         else:
-            frame_avg = compute_frame_average(frame_img)
+            curr_frame_avg = compute_frame_average(frame_img)
             if self.stats_manager is not None:
-                self.stats_manager.set_metrics(frame_num, {self._metric_keys[0]: frame_avg})
+                self.stats_manager.set_metrics(frame_num, {self._metric_keys[0]: curr_frame_avg})
 
-        if self.processed_frame:
-            if self.last_fade['type'] == 'in' and frame_avg < self.threshold:
-                # Just faded out of a scene, wait for next fade in.
-                self.last_fade['type'] = 'out'
-                self.last_fade['frame'] = frame_num
-            elif self.last_fade['type'] == 'out' and frame_avg >= self.threshold:
-                # Only add the scene if min_scene_len frames have passed.
-                if (frame_num - self.last_scene_cut) >= self.min_scene_len:
-                    # Just faded into a new scene, compute timecode for the scene
-                    # split based on the fade bias.
-                    f_out = self.last_fade['frame']
-                    f_split = int(
-                        (f_out + frame_num + int(self.fade_bias * (frame_num - f_out))) / 2)
-                    # TODO(v1.0): Add a separate mode that just uses the threshold for start/stop
-                    # events rather than internally generating cuts.  Since fades of this nature
-                    # are only for ThresholdDetector, keep this abstraction internal.
-                    # Then can add a CLI switch to detect-threshold to either remove all time
-                    # below the threshold, or resort to old fade-bias style (set new default to
-                    # new behaviour since it is likely more useful for most cases).
-                    cut_list.append(
-                        DetectionEvent(kind=EventType.CUT, time=FrameTimecode(f_split, timecode)))
-                    self.last_scene_cut = frame_num
-                self.last_fade['type'] = 'in'
-                self.last_fade['frame'] = frame_num
-        else:
-            self.last_fade['frame'] = 0
-            if frame_avg < self.threshold:
-                self.last_fade['type'] = 'out'
-            else:
-                self.last_fade['type'] = 'in'
-        self.processed_frame = True
-        return cut_list
+        # Swap the average with the last frame's average for use on the next frame.
+        last_frame_avg = self._last_frame_avg
+        self._last_frame_avg = curr_frame_avg
+
+        # Compare the current frame's average against the previous frame, if any.
+        if last_frame_avg is not None:
+            # Detect fade in.
+            if last_frame_avg < self._threshold and curr_frame_avg >= self._threshold:
+                return [DetectionEvent(kind=EventType.IN, time=timecode)]
+            # Detect fade out.
+            if last_frame_avg >= self._threshold and curr_frame_avg < self._threshold:
+                return [DetectionEvent(kind=EventType.OUT, time=timecode)]
+
+        return []  # No previous frames to compare against yet.
 
     def post_process(self, start_time: FrameTimecode,
                      end_time: FrameTimecode) -> List[DetectionEvent]:
-        """Writes a final scene cut if the last detected fade was a fade-out.
-
-        Only writes the scene cut if add_final_scene is true, and the last fade
-        that was detected was a fade-out.  There is no bias applied to this cut
-        (since there is no corresponding fade-in) so it will be located at the
-        exact frame where the fade-out crossed the detection threshold.
-        """
-
-        # If the last fade detected was a fade out, we add a corresponding new
-        # scene break to indicate the end of the scene.  This is only done for
-        # fade-outs, as a scene cut is already added when a fade-in is found.
-        cut_times = []
-        if self.last_fade['type'] == 'out' and self.add_final_scene and (
-            (self.last_scene_cut is None and end_time >= self.min_scene_len) or
-            (end_time - self.last_scene_cut) >= self.min_scene_len):
-            cut_times.append(self.last_fade['frame'])
-        return cut_times
+        return []

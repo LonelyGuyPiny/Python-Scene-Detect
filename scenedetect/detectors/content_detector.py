@@ -59,6 +59,7 @@ class ContentDetector(SceneDetector):
         # Threshold representing detector sensitivity (lower = more sensitive).
         self._threshold: float = threshold
         # Minimum length of any given scene, in frames (int) or as a FrameTimecode.
+        # TODO(v1.0): Consider moving this to SceneManager.transform_events.
         self._min_scene_len: Union[int, FrameTimecode] = min_scene_len
         # Only considers lightness information. Set to True if input video is greyscale.
         self._luma_only: bool = luma_only
