@@ -46,7 +46,8 @@ PySceneDetect Releases
  * The `StatsManager` load/save methods now accept a path or an open file handle
  * The video splitting functions no longer support multiple input videos for concatenation (`scenedetect.video_splitter`)
  * The `SceneManager.detect_scenes()` method no longer displays a progress bar by default (set `show_progress=True` to restore the previous behaviour)
- * Add `SceneManager.transform_events()` method
+ * `SceneManager.get_scene_list()` now returns an empty list if there are no detected events (previously one scene with the duration of the video was returned). To restore the previous behaviour, specify `start_in_scene=True`.
+ * `scene_manager.get_scenes_from_cuts()` has been removed (use `SceneManager.get_scene_list()` instead)
 
 
 ## PySceneDetect 0.5

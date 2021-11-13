@@ -96,45 +96,6 @@ def compute_downscale_factor(frame_width: int, effective_width: int = DEFAULT_MI
     return frame_width // effective_width
 
 
-def get_scenes_from_cuts(cut_list: Iterable[FrameTimecode], start_frame: FrameTimecode, num_frames: int):
-    """ Returns a list of tuples of start/end FrameTimecodes for each scene based on a
-    list of detected scene cuts/breaks.
-
-    This function is called when using the :py:meth:`SceneManager.get_scene_list` method.
-    The scene list is generated from a cutting list (:py:meth:`SceneManager.get_cut_list`),
-    noting that each scene is contiguous, starting from the first to last frame of the input.
-
-
-    Arguments:
-        cut_list (List[FrameTimecode]): List of FrameTimecode objects where scene cuts/breaks occur.
-        base_timecode (FrameTimecode): The base_timecode of which all FrameTimecodes in the cut_list
-            are based on.
-        num_frames (int or FrameTimecode): The number of frames, or FrameTimecode representing
-            duration, of the video that was processed (used to generate last scene's end time).
-        start_frame (int or FrameTimecode): The start frame or FrameTimecode of the cut list.
-            Used to generate the first scene's start time.
-    Returns:
-        List of tuples in the form (start_time, end_time), where both start_time and
-        end_time are FrameTimecode objects representing the exact time/frame where each
-        scene occupies based on the input cut_list.
-    """
-    # Scene list, where scenes are tuples of (Start FrameTimecode, End FrameTimecode).
-    scene_list = []
-    if not cut_list:
-        scene_list.append((start_frame, start_frame + num_frames))
-        return scene_list
-    # Initialize last_cut to the first frame we processed,as it will be
-    # the start timecode for the first scene in the list.
-    last_cut = start_frame
-    for cut in cut_list:
-        scene_list.append((last_cut, cut))
-        last_cut = cut
-    # Last scene is from last cut to end of video.
-    scene_list.append((last_cut, start_frame + num_frames))
-
-    return scene_list
-
-
 def write_scene_list(output_csv_file, scene_list, include_cut_list=True, cut_list=None):
     # type: (File, List[Tuple[FrameTimecode, FrameTimecode]],
     #        Optional[bool], Optional[List[FrameTimecode]]) -> None
@@ -372,6 +333,7 @@ def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
 
     framerate = scene_list[0][0].framerate
 
+    # TODO(v1.0): Split up into multiple sub-expressions so auto-formatter works correctly.
     timecode_list = [
         [
             FrameTimecode(int(f), fps=framerate) for f in [
@@ -571,7 +533,16 @@ class SceneManager(object):
         """ Removes all scene detectors added to the SceneManager via add_detector(). """
         self._detectors.clear()
 
-    def get_scene_list(self) -> List[Tuple[FrameTimecode, FrameTimecode]]:
+    def get_scene_list(
+        self,
+        min_scene_len: Union[FrameTimecode, int] = 15,
+        merge_len: Optional[Union[FrameTimecode, int]] = 0,
+        drop_short_scenes: bool = False,
+        shift_scene_start: Union[FrameTimecode, int] = 0,
+        shift_scene_end: Union[FrameTimecode, int] = 0,
+        overlap_bias: Optional[float] = None,
+        always_include_end: bool = False,
+    ) -> List[Tuple[FrameTimecode, FrameTimecode]]:
         """Returns a list of tuples of start/end `FrameTimecodes` for each detected scene.
         If multiple events are found on the same frame, only last event (i.e. most recent in the
         processing pipeline) will be used.
@@ -580,7 +551,34 @@ class SceneManager(object):
         `EventType.IN`/`EventType.OUT` event pairs. If there are only CUT events, the entire
         duration of the processed video will be covered by the resulting scene list. If there are
         no events at all (i.e. self.events is empty), an empty list is returned.
-.
+
+        Arguments:
+            min_scene_len: Minimum length each scene must be. If a given scene is smaller than
+                this amount, the scene will be merged with the first predecessor less than
+                `merge_len` away, if one exists, otherwise the first successor less than `merge_len`
+                away. If no such scene can be found, or `merge_len` is None, the event is dropped.
+                This value applies before `shift_scene_start`/`shift_scene_end`.
+            merge_len: Specifies the maximum distance an adjacent scene can be, in time, from scenes
+                smaller than `min_scene_len` before they are dropped instead of merged. If set to
+                None, all scenes less than `min_scene_len` are dropped. The default (0) only merges
+                scenes shorter than `min_scene_len` if there is a scene directly adjacent to it.
+            shift_scene_start: Amount to add to each scene's start timecode. Negative values
+                imply shifting the start time backwards (e.g. making each scene longer).
+                If the shifted time overlaps with another scene, they will be merged unless
+                overlap_bias is set.
+                TODO(v1.0): Allow negative FrameTimecode values in addition to frame numbers.
+                Do as part of the FrameTimecode refactor; for now just test using frame numbers,
+                and don't expose any CLI options for this under the `post-process` command yet.
+            shift_scene_end: Amount to add to each scene's end timecode. Negative values
+                imply shifting the end time backwards (e.g. making each scene shorter).
+                Overlapping scenes will be merged unless overlap_bias is set.
+            overlap_bias: If set, specifies how the resulting scene start/end times should be
+                shifted in the case that the specified shift amount causes an overlap. If not
+                set (i.e. is None), any overlapping scenes will be merged together.
+                Valid values are between -1.0 and +1.0, with -1.0 prioritizing shift_scene_start
+                and +1.0 prioritizing shift_scene_end. A value of 0.0 will set the transition
+                directly between the midpoint of the resulting overlap.
+
         Returns:
             List of tuples in the form `(start_time, end_time)`, where start_time is the first
             frame's presentation time stamp (PTS), and end_time is the last frame's PTS plus the
@@ -589,12 +587,16 @@ class SceneManager(object):
 
         if not self._events:
             return []
-        if not (EventType.IN in self._event_types or EventType.OUT in self._event_types):
-           return get_scenes_from_cuts(self.get_cut_list(), self._start_pos, self._num_frames)
 
-        scene_list: List[Tuple[FrameTimecode, FrameTimecode]] = []
+        assert self._start_pos is not None
+        scene_start: FrameTimecode = self._start_pos
         in_scene: bool = False
-        scene_start: FrameTimecode = None
+        scene_list: List[Tuple[FrameTimecode, FrameTimecode]] = []
+
+        # If we only have CUT events, ensure the resulting scene list covers the entire video.
+        if not (EventType.IN in self._event_types or EventType.OUT in self._event_types):
+           in_scene = True
+
         for timecode in sorted(self._events.keys()):
             # Prevent adding multiple scenes if there are two events on the same frame.
             added_new_scene = False
@@ -616,41 +618,50 @@ class SceneManager(object):
                             scene_list.append((scene_start, timecode))
                             added_new_scene = True
                         scene_start = timecode
+
         # If we ended after an EventType.IN, make sure we end the scene on the last frame.
         if in_scene:
             scene_list.append((scene_start, self._start_pos + self._num_frames))
+
+        # TODO(v1.0): Handle min_scene_len / drop_short_scenes.
+
         return scene_list
 
 
-    def get_cut_list(self) -> List[FrameTimecode]:
-        """Returns a list of frames where EventType.CUT events were found."""
-        return [
+    def get_cut_list(self, min_time_between_cuts: Union[FrameTimecode, int] = 15) -> List[FrameTimecode]:
+        """Returns a list of frames where EventType.CUT events were found.
+
+        Arguments:
+            min_time_between_cuts: Sets the minimum spacing requirement, in time, between cuts.
+                For example, if a cut occurs on frame 2 and min_time_between_cuts = 4 frames,
+                any cuts on frames 3, 4, 5, and 6 will be ignored/dropped.
+        """
+        cuts = [
             event_time for event_time in sorted(self._events)
             if any(event.kind == EventType.CUT for event in self._events[event_time])
         ]
+        if min_time_between_cuts > 0 and len(cuts) > 1:
+            filtered_cuts = cuts[0:1]
+            filtered_cuts += [
+                cuts[i]
+                for i in range(1, len(cuts))
+                if ((cuts[i] - cuts[i - 1]) - 1) < min_time_between_cuts
+            ]
+            cuts = filtered_cuts
+        return cuts
 
-
-    def transform_events(
-        self,
-        shift_in_events: Optional[FrameTimecode]=None,
-        shift_out_events: Optional[FrameTimecode]=None,
-        fade_bias: Optional[float]=None,
-        add_in_at_start: bool=False,
-        all_events_as_cuts: bool=False,
-        min_event_spacing: Optional[FrameTimecode]=None,
-        ):
-
-        """Applies a set of common transformations to `events`, returning a new event dictionary.
+    def transform_events_to_cuts(self, fade_bias: Optional[float]=0.0) -> None:
+        """Transform all IN/OUT events to CUT events.
 
         Arguments:
-            shift_in_events: Shift in events by the given amount of time.
-            shift_out_events: Shift out events by the given amount of time.
             fade_bias: If set, replaces the space between OUT and IN events with CUT events, where
                 fade_bias represents the relative location of the CUT between the two.
 
                 If set to 0.0 (the default), a cut will be placed the middle of the two OUT/IN
                 events. Otherwise, must be between -1.0 and +1.0, with -1.0 closest to the OUT event
                 and +1.0 closest to the IN event.
+
+                If unset (i.e. None), transforms all event types to EventType.CUT.
 
                 As a visual reference, the following shows what cuts different fade_bias values
                 will produce if there is an OUT event on frame 2 and an IN event on frame 6:
@@ -668,83 +679,29 @@ class SceneManager(object):
                 Thus in this scenario, a fade_bias of None will produce cuts at frames 2 and 6,
                 -1.0 produces a cut at 2, +1.0 produces a cut at 6, and 0.0 produces a cut directly
                 in the middle of the OUT/IN event pair at frame 4.
-            all_events_as_cuts: Treat each event type as an EventType.CUT event.
-            add_in_at_start: Add an EventType.IN event on the first processed frame, if any.
-            min_event_spacing: Sets the minimum spacing requirement, in time, between events.
-                For example, if an event occurs on frame 2 and min_event_spacing = 4 frames,
-                any events on frames 3, 4, 5, and 6 will be filtered/removed from `events`.
-            """
+        """
 
-        # Handle shift_in_events/shift_out_events.
-        shifted_events: List[DetectionEvent] = []
-        # Shift IN a events.
-        if shift_in_events is not None:
-            for timecode in self._events:
-                shifted_events += [
-                    DetectionEvent(
-                        kind=event.kind, time=event.time + shift_in_events, context=event.context)
-                    for event in self._events[timecode]
-                    if event.kind == EventType.IN
-                ]
-        # Shift OUT events.
-        if shift_out_events is not None:
-            for timecode in self._events:
-                shifted_events += [
-                    DetectionEvent(
-                        kind=event.kind, time=event.time + shift_out_events, context=event.context)
-                    for event in self._events[timecode]
-                    if event.kind == EventType.OUT
-                ]
-        # Filter IN/OUT events.
-        for timecode in self._events:
-            self._events[timecode] = [
-                event for event in self._events[timecode]
-                if not event.kind in (EventType.IN, EventType.OUT)
-            ]
-        # Re-add shifted events.
-        self._events.update({event.time: event for event in shifted_events})
-
-        # Handle fade_bias.
-        if fade_bias is not None:
-            # TODO(v1.0): Handle fade_bias.
-            raise NotImplementedError("TODO(v1.0): Handle fade_bias.")
-
-        # Handle add_in_at_start.
-        if add_in_at_start and self._start_pos is not None:
-            self._events[self._start_pos] = self._start_pos
-
-        # Handle all_events_as_cuts.
-        if all_events_as_cuts:
+        # If fade_bias is None, then we simply replace the type of each event with EventType.CUT.
+        if fade_bias is None:
             for timecode in self._events:
                 self._events[timecode] = [
                     DetectionEvent(kind=EventType.CUT, time=event.time, context=event.context)
                     for event in self._events[timecode]
                 ]
+            return
+
+        # TODO(v1.0): Handle fade_bias.
+        raise NotImplementedError("TODO(v1.0): Handle fade_bias.")
 
         # Cleanup the event list by removing all blank list keys.
-        # This needs to be done before handling `min_event_spacing` below as it uses
-        # the event dict keys to determine the gaps between events.
         for key in [timecode for timecode in self._events if not self._events[timecode]]:
             del self._events[key]
-
-        # Handle min_event_spacing.
-        if min_event_spacing > 0:
-            # Remove all events on frames where the distance from any previous event is
-            # less than min_event_spacing.
-            all_timecodes: List[FrameTimecode] = sorted(self._events.keys())
-            if len(all_timecodes) > 1:
-                last_timecode: FrameTimecode = all_timecodes[0]
-                for timecode in all_timecodes[1:]:
-                    if (timecode - last_timecode) < (min_event_spacing + 1):
-                        del self._events[timecode]
-                    else:
-                        last_timecode = timecode
 
 
     def _process_frame(self,
                        timecode: FrameTimecode,
                        frame_im: Optional[np.ndarray],
-                       callback: Callable[[Optional[np.ndarray], int], None] = None):
+                       callback: Callable[[Optional[np.ndarray], int], None] = None) -> None:
         """ Adds any cuts detected with the current frame to the cutting list. """
         for detector in self._detectors:
             events: Iterable[DetectionEvent] = detector.process_frame(timecode, frame_im)
@@ -753,7 +710,7 @@ class SceneManager(object):
                 # TODO(v1.0): Expand context passed to callback.
                 callback(frame_im, timecode.frame_num)
 
-    def _add_events(self, events: Iterable[DetectionEvent]):
+    def _add_events(self, events: Iterable[DetectionEvent]) -> None:
         for event in events:
             self._event_types.add(event.kind)
             if not event.time in self._events:
