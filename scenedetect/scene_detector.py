@@ -56,6 +56,9 @@ class EventType(Enum):
     OUT = 3
 
 
+# TODO(v1.0): Remove @dataclass and remove library from requirements, not really needed for
+# just a few objects. Just add an __init__ and keep the members public, no need for @properties
+# either if it's a data class like this.
 @dataclass
 class DetectionEvent:
     """Event data which SceneDetectors objects produce while processing frames.

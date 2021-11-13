@@ -179,7 +179,7 @@ class CliContext(object):
         self._check_input_open_failed = False   # Used to avoid excessive log messages
 
     def parse_options(self, input_path: str, framerate: float, stats_file: Optional[str],
-                      downscale: Optional[int], frame_skip: int, min_scene_len: int,
+                      downscale: Optional[int], frame_skip: int, min_scene_len: str,
                       drop_short_scenes: bool):
         """ Parse Options: Parses all global options/arguments passed to the main
         scenedetect command, before other sub-commands (e.g. this function processes

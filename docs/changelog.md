@@ -11,29 +11,42 @@ PySceneDetect Releases
  * Support for Python 2.7 has been dropped, new minimum supported Python version is 3.6
  * Support for OpenCV 2.x has been dropped, new minimum OpenCV version is 3.x
  * First major API update and internal with significant changes from v0.5.x, feedback on the new design is welcome
- * Due to the significant amount of API changes, it is recommended to look at the updated quickstart & API examples in the manual
+ * Due to the significant amount of changes, it is recommended to review the updated quickstart & API examples in the manual
+    * TODO(v1.0): Add transition guides for API and CLI changes.
  * Adds support for multiple video backends to improve both performance and accuracy
- * Frame numbers now start from 1 instead of 0 to match most other tools/libraries (e.g. `ffmpeg`), although `FrameTimecode` is still 0-based (this is corrected transparently)
+ * Frame numbers reported via command-line now start from 1 instead of 0 to match most other tools/libraries
 
 #### Changelog
 
- * [general] Frame numbers now start from 1 instead of 0
- * [general] Drop Python 2.7 support, new minimum version is 3.6
- * [api] New `VideoStream` object replaces `VideoManager` and supports both OpenCV and PyAV backends
-    * Improves video seeking invariants, especially around defining what frames 0 and 1 mean
-    * FrameTimecode objects still are 0-based (e.g. frame #0 is PTS 0), but the `VideoStream.frame_number` property is 1-based
-    * See `test_time_invariants` in `tests/test_video_stream.py` as a reference for specific behaviours, and a test video detailing visually what is expected. TODO(v1.0): Add links to both test_time_invariants and the test video)
- * [api] `save_images()` no longer accepts downscale_factor, since there is already the ability to resize images via the `scale` or `height`/`width` arguments
- * [api] Responsibility for frame downscaling has been moved to `SceneManager`
- * [api] The `StatsManager` load/save methods now accept a path or an open file handle
- * [api] The video splitting functions no longer support multiple input videos for concatenation (`scenedetect.video_splitter`)
- * [api] The `SceneManager.detect_scenes()` method no longer displays a progress bar *by default* (set `show_progress=True` to restore the previous behaviour)
- * [bugfix] Fix `detect-adaptive` not respecting `--drop-short-scenes`
- * [cli] Remove `-m`/`--min-scene-len` from `detect-adaptive` (use the global option instead)
+**General changes:**
+ * Drops support for Python 2.7, new minimum version is now Python 3.6
+ * TODO(v1.0): The first frame is now denoted as frame 1 instead of 0, matching most other video processing tools
+     * As a consequence of this change, the end frame of a scene is also one-past the actual end index (thus the duration of a scene in frames still aligns with the time in seconds)
 
- * [cli] `split-video` behaviour changes:
+**Command-line changes:**
+ * `split-video` command:
      * The `-c`/`--copy` flag now uses `ffmpeg` stream copying mode instead of `mkvmerge`
      * The new `-m`/`--mkvmerge` flag specifies to use `mkvmerge` instead of `ffmpeg`
+ * `detect-threshold` command:
+     * Portions of the video below the threshold will now be excluded from the final scene list by default (thus removing it from the output generated via `split-video`)
+     * The new `-e`/`--emit-cuts` option will restore the previous behaviour by emitting cut events instead of in/out events
+     * Removed the `-b`/`--block-size` and `-p`/`--min-percent` arguments
+     * Add new `-tb`/`--time-before` and `-ta`/`--time-after` arguments to control amount of video to include before/after each in/out event, respectively (both values are set to 0.2s by default)
+
+ * `detect-adaptive` command:
+     * [bugfix] Fix `detect-adaptive` not respecting `--drop-short-scenes`
+     * Removed `-m`/`--min-scene-len` (use the global option instead)
+
+**API changes:**
+ * New `VideoStream` object replaces `VideoManager` and supports both OpenCV and PyAV backends
+    * Improves video seeking invariants, especially around defining what frames 0 and 1 mean for different time properties (`frame_number` is 1-based whereas `position` is 0-based to align with PTS)
+    * See `test_time_invariants` in `tests/test_video_stream.py` as a reference for specific behaviours of these properties, and a test video detailing visually what is expected. (TODO(v1.0): Add links to both test_time_invariants and the test video)
+ * `save_images()` no longer accepts downscale_factor, since there is already the ability to resize images via the `scale` or `height`/`width` arguments
+ * Responsibility for frame downscaling (TODO(v1.0): and min_scene_len) has been moved to `SceneManager`
+ * The `StatsManager` load/save methods now accept a path or an open file handle
+ * The video splitting functions no longer support multiple input videos for concatenation (`scenedetect.video_splitter`)
+ * The `SceneManager.detect_scenes()` method no longer displays a progress bar by default (set `show_progress=True` to restore the previous behaviour)
+ * Add `SceneManager.transform_events()` method
 
 
 ## PySceneDetect 0.5
