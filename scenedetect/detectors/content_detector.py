@@ -128,7 +128,7 @@ class ContentDetector(SceneDetector):
         frame_num = timecode.frame_num
 
         # Initialize last scene cut point at the beginning of the frames of interest.
-        if self._last_scene_cut is None:
+        if self._last_scene_cut is None or self._last_scene_cut > frame_num:
             self._last_scene_cut = frame_num
 
         # Can only begin processing once we have at least one frame:

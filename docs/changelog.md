@@ -8,46 +8,79 @@ PySceneDetect Releases
 
 #### Release Notes
 
- * Support for Python 2.7 has been dropped, new minimum supported Python version is 3.6
- * Support for OpenCV 2.x has been dropped, new minimum OpenCV version is 3.x
- * First major API update and internal with significant changes from v0.5.x, feedback on the new design is welcome
- * Due to the significant amount of changes, it is recommended to review the updated quickstart & API examples in the manual
-    * TODO(v1.0): Add transition guides for API and CLI changes.
- * Adds support for multiple video backends to improve both performance and accuracy
- * Frame numbers reported via command-line now start from 1 instead of 0 to match most other tools/libraries
+This is the first major release of PySceneDetect since the original release in 2014, which while adding many new features and a more streamlined interface, also greatly reduces the technical debt that has allowed the project to get here. While there are many breaking changes both for the command-line `scenedetect` utility as well as the Python API, equivalents for older behaviour are provided where possible.
+
+**Although changes to the command-line were as minimal as possible, there are still behavioural and breaking changes.  It is recommended that all users review the the command-line changes listed below before upgrading.**
+
+In terms of the Python API, developers should expect the new interface to be much more simplified and clean, while allowing even more advanced features. New detection algorithms are much easier to implement now, and can detect a variety of cut types now (instead of just fast cuts). Backends for different video input libraries are also now supported, with v1.0 shipping with OpenCV and PyAV support. Check out the new API quickstart example or transition guide for more details (TODO(v1.0): Link).
+
 
 #### Changelog
 
 **General changes:**
- * Drops support for Python 2.7, new minimum version is now Python 3.6
- * TODO(v1.0): The first frame is now denoted as frame 1 instead of 0, matching most other video processing tools
-     * As a consequence of this change, the end frame of a scene is also one-past the actual end index (thus the duration of a scene in frames still aligns with the time in seconds)
+
+ * Support for Python 2.7 has been dropped, minimum supported Python version is 3.6
+ * Support for OpenCV 2.x has been dropped, minimum OpenCV version is 3.x
+ * First major API update with significant changes from v0.5 (feedback is welcome)
+ * Besides critical bugfixes, this marks the end of development for PySceneDetect v0.5
+ * Adds support for multiple video backends to improve both performance and accuracy
+ * TODO(v1.0): Frame numbers reported via command-line now start from 1 instead of 0 to match most other tools/libraries
+     * As a consequence of this change, the end frame of a scene is also one-past the actual end *index* (thus the duration of a scene in frames still aligns with the time in seconds)
 
 **Command-line changes:**
+
+ * `scenedetect` global options:
+    * `-m`/`--min-scene-len` will be removed in the next release; use the same option in `post-process` now
+    * `-d`/`--drop-short-scenes` will be removed in the next release; use the same option in `post-process` now
  * `split-video` command:
      * The `-c`/`--copy` flag now uses `ffmpeg` stream copying mode instead of `mkvmerge`
      * The new `-m`/`--mkvmerge` flag specifies to use `mkvmerge` instead of `ffmpeg`
  * `detect-threshold` command:
      * Portions of the video below the threshold will now be excluded from the final scene list by default (thus removing it from the output generated via `split-video`)
-     * The new `-e`/`--emit-cuts` option will restore the previous behaviour by emitting cut events instead of in/out events
-     * Removed the `-b`/`--block-size` and `-p`/`--min-percent` arguments
-     * Add new `-tb`/`--time-before` and `-ta`/`--time-after` arguments to control amount of video to include before/after each in/out event, respectively (both values are set to 0.2s by default)
-
+     * To restore previous behav
+     * Removed `-b`/`--block-size` and `-p`/`--min-percent`
+     * `-f`/`--fade-bias` will be removed in the next release; use the same option in `post-process` now
+     * `-l`/`--add-last-scene` will be removed in the next release; use the same option in `post-process` now
+ * `detect-content` command:
+     * `-m`/`--min-scene-len` will be removed in the next release; use the same option in `post-process` now
  * `detect-adaptive` command:
-     * [bugfix] Fix `detect-adaptive` not respecting `--drop-short-scenes`
-     * Removed `-m`/`--min-scene-len` (use the global option instead)
+     * `-m`/`--min-scene-len` will be removed in the next release; use the same option in `post-process` now
+ * (TODO(v1.0)) `post-process` command (new):
+     * Add `-m`/`--min-scene-len TIME` to ensure all scenes are a minimum length by dropping or merging adjacent scenes (controlled by `-d` and `-l`)
+        * Replaces current global option; existing option will remain but show a warning until the next minor release (v1.1)
+     * Add `-d`/`--drop-short-scenes` to specify that all scenes shorter than `-m` should be dropped instead of merged
+        * Replaces current global option; existing option will remain but show a warning until the next minor release (v1.1)
+     * Add `-g`/`--merge-len TIME` to control maximum amount of time between scenes that are candidates for merging. Scenes will be merged with their predecessors if possible, otherwise their successor
+     * Add `-tb`/`--time-before TIME` and `-ta`/`--time-after TIME` arguments to control amount of video to include before/after each scene, respectively (both values are set to 0.2s by default)
+        * TODO(v1.0): Allow negatives.
+     * Add `-o`/`--overlap-bias N` to control how overlaps should be treated if `-tb` and/or `-ta` are specified, where `N` is between -1.0 (further back in time) to 1.0 (forward in time). Can also specify `-o allow` to indicate overlapping boundaries are allowed, and thus all scene start/end times are shifted by the set amount.
+     * Add `-l`/`--add-last-scene` to add an additional scene from the last OUT event to the end of the video
+        * Replaces current option from `detect-threshold`; existing option will remain but show a warning until the next minor release (v1.1)
+     * Add `-s`/`--add-start-scene` to add a scene from the beginning of the video to the first IN event
+     * Add `-f`/`--fade-bias N` to control replacing the space between OUT/IN events with CUT events. Values for `N` can range from -1.0 to 1.0, with 0 being the midpoint, -1.0 closest to the OUT event, and 1.0 closest to the IN event. Cannot be set with `-o allow`.
+        * Replaces current option from `detect-threshold`; existing option will remain but show a warning until the next minor release (v1.1)
 
 **API changes:**
+
+ * Scene detection algorithms can now provide additional context during a detection event (e.g. confidence)
+ * Common non-trivial event processing options have been moved from existing detectors to the `SceneManager`:
+    * `SceneManager.get_scene_list()` now handles minimum scene length (previously was done in each detector), merge/drop behaviour (previously only exposed via CLI), and shifting of events in time (new)
+    * `SceneManager.get_cut_list()` allows specifying the minimum time between events (previously done in each detector)
+    * `SceneManager.transform_events_to_cuts()` handles converting out/in events into cuts (previously this was done in `ThresholdDetector`)
  * New `VideoStream` object replaces `VideoManager` and supports both OpenCV and PyAV backends
     * Improves video seeking invariants, especially around defining what frames 0 and 1 mean for different time properties (`frame_number` is 1-based whereas `position` is 0-based to align with PTS)
     * See `test_time_invariants` in `tests/test_video_stream.py` as a reference for specific behaviours of these properties, and a test video detailing visually what is expected. (TODO(v1.0): Add links to both test_time_invariants and the test video)
  * `save_images()` no longer accepts downscale_factor, since there is already the ability to resize images via the `scale` or `height`/`width` arguments
- * Responsibility for frame downscaling (TODO(v1.0): and min_scene_len) has been moved to `SceneManager`
+ * Responsibility for frame downscaling has been moved to `SceneManager`
  * The `StatsManager` load/save methods now accept a path or an open file handle
  * The video splitting functions no longer support multiple input videos for concatenation (`scenedetect.video_splitter`)
  * The `SceneManager.detect_scenes()` method no longer displays a progress bar by default (set `show_progress=True` to restore the previous behaviour)
  * `SceneManager.get_scene_list()` now returns an empty list if there are no detected events (previously one scene with the duration of the video was returned). To restore the previous behaviour, specify `start_in_scene=True`.
  * `scene_manager.get_scenes_from_cuts()` has been removed (use `SceneManager.get_scene_list()` instead)
+
+ **Features and Bugfixes:**
+
+ * [bugfix] Fix `detect-adaptive` not respecting `--drop-short-scenes`
 
 
 ## PySceneDetect 0.5

@@ -444,9 +444,10 @@ class SceneManager(object):
 
         self._stats_manager: Optional[StatsManager] = stats_manager
 
-        self._num_frames = 0
         # Position of video that was first passed to detect_scenes.
-        self._start_pos = None
+        self._start_pos: FrameTimecode = None
+        # Position of video on the last frame processed by detect_scenes.
+        self._last_pos: FrameTimecode = None
         self._base_timecode: Optional[FrameTimecode] = None
         self._downscale: int = 1
         self._auto_downscale: bool = True
@@ -458,6 +459,10 @@ class SceneManager(object):
         """Returns a dictionary of FrameTimecodes to DetectionEvents that have been found by the
         attached detectors."""
         return self._events
+
+    def get_event_list(self) -> List[DetectionEvent]:
+        """Returns all events flattened into a list and sorted in ascending time."""
+        return sum([self._events[timecode] for timecode in sorted(self._events.keys())], [])
 
     @property
     def stats_manager(self) -> Optional[StatsManager]:
@@ -525,7 +530,6 @@ class SceneManager(object):
 
         Any statistics generated are still saved in the bound StatsManager if any. """
         self._events.clear()
-        self._num_frames = 0
         self._start_pos = None
         self._event_types = set()
 
@@ -537,7 +541,6 @@ class SceneManager(object):
         self,
         min_scene_len: Union[FrameTimecode, int] = 15,
         merge_len: Optional[Union[FrameTimecode, int]] = 0,
-        drop_short_scenes: bool = False,
         shift_scene_start: Union[FrameTimecode, int] = 0,
         shift_scene_end: Union[FrameTimecode, int] = 0,
         overlap_bias: Optional[float] = None,
@@ -559,9 +562,9 @@ class SceneManager(object):
                 away. If no such scene can be found, or `merge_len` is None, the event is dropped.
                 This value applies before `shift_scene_start`/`shift_scene_end`.
             merge_len: Specifies the maximum distance an adjacent scene can be, in time, from scenes
-                smaller than `min_scene_len` before they are dropped instead of merged. If set to
-                None, all scenes less than `min_scene_len` are dropped. The default (0) only merges
-                scenes shorter than `min_scene_len` if there is a scene directly adjacent to it.
+                smaller than `min_scene_len` before they are dropped instead of merged. The default
+                (0) only merges scenes shorter than `min_scene_len` if there is a scene directly
+                adjacent to it. If set to None, scenes will be dropped instead of merged.
             shift_scene_start: Amount to add to each scene's start timecode. Negative values
                 imply shifting the start time backwards (e.g. making each scene longer).
                 If the shifted time overlaps with another scene, they will be merged unless
@@ -589,7 +592,7 @@ class SceneManager(object):
             return []
 
         assert self._start_pos is not None
-        scene_start: FrameTimecode = self._start_pos
+        last_event_pos: FrameTimecode = self._start_pos
         in_scene: bool = False
         scene_list: List[Tuple[FrameTimecode, FrameTimecode]] = []
 
@@ -604,24 +607,32 @@ class SceneManager(object):
                 # EventType.IN: Mark that we are now in a scene.
                 if event.kind == EventType.IN:
                     in_scene = True
-                    scene_start = timecode
+                    last_event_pos = timecode
                 # EventType.OUT: Mark that we are now out a scene, and add a new one.
                 elif event.kind == EventType.OUT:
-                    in_scene = False
-                    if not added_new_scene:
-                        scene_list.append((scene_start, timecode))
-                        added_new_scene = True
+                    # Make sure we only set the last_event_pos for the first OUT event we see if
+                    # there happens to be consecutive ones.
+                    new_start_pos = last_event_pos
+                    if in_scene:
+                        last_event_pos = timecode
+                        in_scene = False
+                        if not added_new_scene:
+                            scene_list.append((new_start_pos, timecode))
+                            added_new_scene = True
                 # EventType.CUT: Start a new scene.
                 elif event.kind == EventType.CUT:
                     if in_scene:
                         if not added_new_scene:
-                            scene_list.append((scene_start, timecode))
+                            scene_list.append((last_event_pos, timecode))
                             added_new_scene = True
-                        scene_start = timecode
+                        # Don't update last_event_pos unless we are in a scene since we may need
+                        # to include the portion of the video from the last OUT event below.
+                        last_event_pos = timecode
 
         # If we ended after an EventType.IN, make sure we end the scene on the last frame.
-        if in_scene:
-            scene_list.append((scene_start, self._start_pos + self._num_frames))
+        if in_scene or always_include_end:
+            # Include presentation time of the final frame.
+            scene_list.append((last_event_pos, self._last_pos + 1))
 
         # TODO(v1.0): Handle min_scene_len / drop_short_scenes.
 
@@ -632,21 +643,18 @@ class SceneManager(object):
         """Returns a list of frames where EventType.CUT events were found.
 
         Arguments:
-            min_time_between_cuts: Sets the minimum spacing requirement, in time, between cuts.
-                For example, if a cut occurs on frame 2 and min_time_between_cuts = 4 frames,
-                any cuts on frames 3, 4, 5, and 6 will be ignored/dropped.
+            min_time_between_cuts: Ignores any cuts between the current cut and plus
+                `min_time_between_cuts`. Values <= 1 have no effect.
         """
         cuts = [
             event_time for event_time in sorted(self._events)
             if any(event.kind == EventType.CUT for event in self._events[event_time])
         ]
-        if min_time_between_cuts > 0 and len(cuts) > 1:
+        if min_time_between_cuts > 1 and len(cuts) > 1:
             filtered_cuts = cuts[0:1]
-            filtered_cuts += [
-                cuts[i]
-                for i in range(1, len(cuts))
-                if ((cuts[i] - cuts[i - 1]) - 1) < min_time_between_cuts
-            ]
+            for i in range(1, len(cuts)):
+                if cuts[i] - filtered_cuts[-1] >= min_time_between_cuts:
+                    filtered_cuts.append(cuts[i])
             cuts = filtered_cuts
         return cuts
 
@@ -778,10 +786,6 @@ class SceneManager(object):
         self._base_timecode = video.base_timecode
         start_frame_num: int = video.frame_number
 
-        # TODO(v1.0): Remove the condition on frame_number being zero.
-        if self._start_pos is None and video.frame_number == 0:
-            self._start_pos = video.position
-
         if duration is not None:
             end_time = duration + start_frame_num
 
@@ -826,9 +830,9 @@ class SceneManager(object):
                 else:
                     if video.read(decode=False) is False:
                         break
-
                 if self._start_pos is None:
                     self._start_pos = video.position
+
                 self._process_frame(video.position, frame_im, callback)
 
                 if progress_bar:
@@ -843,6 +847,8 @@ class SceneManager(object):
 
                 if end_time is not None and video.position >= end_time:
                     break
+            if self._start_pos is None:
+                self._start_pos = video.position
             self._post_process(start_time=self._start_pos, end_time=video.position)
 
         finally:
@@ -850,5 +856,5 @@ class SceneManager(object):
             if progress_bar:
                 progress_bar.close()
 
-        self._num_frames = video.frame_number - start_frame_num
-        return self._num_frames
+        self._last_pos = video.position
+        return video.frame_number - start_frame_num
