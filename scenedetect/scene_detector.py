@@ -33,7 +33,6 @@ are expected to provide in order to be compatible with PySceneDetect.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -51,15 +50,12 @@ class EventType(Enum):
         IN: Beginning of a scene/event (e.g. fade-in event, motion start)
         OUT: End of a scene/event (e.g. fade-out event, motion stop)
     """
+
     CUT = 1
     IN = 2
     OUT = 3
 
 
-# TODO(v1.0): Remove @dataclass and remove library from requirements, not really needed for
-# just a few objects. Just add an __init__ and keep the members public, no need for @properties
-# either if it's a data class like this.
-@dataclass
 class DetectionEvent:
     """Event data which SceneDetectors objects produce while processing frames.
 
@@ -69,9 +65,14 @@ class DetectionEvent:
         context (Dict[str, Any]): Data specific to each detector. See each detector's documentation
             for what values it populates (e.g. certain detectors may produce a confidence score).
     """
-    kind: EventType
-    time: FrameTimecode
-    context: Optional[Dict[str, Any]] = None
+
+    def __init__(self,
+                 kind: EventType,
+                 time: FrameTimecode,
+                 context: Optional[Dict[str, Any]] = None):
+        self.kind: EventType = kind
+        self.time: FrameTimecode = time
+        self.context: Optional[Dict[str, Any]] = context
 
 
 class SceneDetector(ABC):
@@ -138,11 +139,11 @@ class SceneDetector(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def post_process(self, start_time: FrameTimecode, end_time: FrameTimecode) -> List[DetectionEvent]:
+    def post_process(self, start_time: FrameTimecode,
+                     end_time: FrameTimecode) -> List[DetectionEvent]:
         """Performs any processing after the last frame has been read.
 
         Returns:
             List[int]: List of frame numbers of cuts to be added to the cutting list.
         """
         raise NotImplementedError
-

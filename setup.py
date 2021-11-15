@@ -46,7 +46,6 @@ def get_requires():
         'Click',
         'numpy',
         'tqdm',
-        'dataclasses:python_version<3.7'
     ]
 
 def get_extra_requires():
