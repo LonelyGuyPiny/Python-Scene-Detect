@@ -54,17 +54,14 @@ import cv2
 import numpy as np
 
 from scenedetect.frame_timecode import FrameTimecode
-from scenedetect.platform import (
-    tqdm, get_and_create_path, get_csv_writer, get_cv2_imwrite_params)
+from scenedetect.platform import (tqdm, get_and_create_path, get_csv_writer, get_cv2_imwrite_params)
 from scenedetect.video_stream import VideoStream
 from scenedetect.stats_manager import StatsManager, FrameMetricRegistered
 from scenedetect.scene_detector import DetectionEvent, EventType, SceneDetector
-from scenedetect.thirdparty.simpletable import (
-    SimpleTableCell, SimpleTableImage, SimpleTableRow, SimpleTable, HTMLPage)
-
+from scenedetect.thirdparty.simpletable import (SimpleTableCell, SimpleTableImage, SimpleTableRow,
+                                                SimpleTable, HTMLPage)
 
 logger = logging.getLogger('pyscenedetect')
-
 
 ##
 ## SceneManager Helper Functions
@@ -75,6 +72,7 @@ logger = logging.getLogger('pyscenedetect')
 # value doesn't seem to have caused any issues at least.
 DEFAULT_MIN_WIDTH: int = 256
 """The default minimum width a frame will be downscaled to when calculating a downscale factor."""
+
 
 def compute_downscale_factor(frame_width: int, effective_width: int = DEFAULT_MIN_WIDTH) -> int:
     """Get the optimal default downscale factor based on a video's resolution (currently only
@@ -337,25 +335,25 @@ def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
     timecode_list = [
         [
             FrameTimecode(int(f), fps=framerate) for f in [
-    # middle frames
+                                                                                               # middle frames
                 a[len(a) // 2] if (0 < j < num_images - 1) or num_images == 1
 
-    # first frame
+                                                                                               # first frame
                 else min(a[0] + frame_margin, a[-1]) if j == 0
 
-    # last frame
+                                                                                               # last frame
                 else max(a[-1] - frame_margin, a[0])
 
-    # for each evenly-split array of frames in the scene list
+                                                                                               # for each evenly-split array of frames in the scene list
                 for j, a in enumerate(np.array_split(r, num_images))
             ]
         ] for i, r in enumerate([
-    # pad ranges to number of images
+                                                                                               # pad ranges to number of images
             r if 1 + r[-1] - r[0] >= num_images else list(r) + [r[-1]] * (num_images - len(r))
-    # create range of frames in scene
+                                                                                               # create range of frames in scene
             for r in (
                 range(start.get_frames(), end.get_frames())
-    # for each scene in scene list
+                                                                                               # for each scene in scene list
                 for start, end in scene_list)
         ])
     ]
@@ -428,8 +426,10 @@ class SceneManager(object):
     the optimal threshold values or other options for various detection algorithms.
     """
 
-    def __init__(self, stats_manager: Optional[StatsManager] = None,
-        ):
+    def __init__(
+        self,
+        stats_manager: Optional[StatsManager] = None,
+    ):
         """TODO(v1.0): This class should own a StatsManager instead of taking an optional one.
         Expose a new `stats_manager` @property from the SceneManager, and either change the
         `stats_manager` argument to to `store_stats: bool=False, or lazy-init one.
@@ -451,8 +451,8 @@ class SceneManager(object):
         self._base_timecode: Optional[FrameTimecode] = None
         self._downscale: int = 1
         self._auto_downscale: bool = True
-        # Types of events which have been detected so far.
-        self._event_types: Set[EventType] = set()
+        # Boolean indicating if we have only seen EventType.CUT events so far.
+        self._only_cuts: bool = True
 
     @property
     def events(self) -> Dict[FrameTimecode, Iterable[DetectionEvent]]:
@@ -531,7 +531,7 @@ class SceneManager(object):
         Any statistics generated are still saved in the bound StatsManager if any. """
         self._events.clear()
         self._start_pos = None
-        self._event_types = set()
+        self._only_cuts = True
 
     def clear_detectors(self) -> None:
         """ Removes all scene detectors added to the SceneManager via add_detector(). """
@@ -539,7 +539,7 @@ class SceneManager(object):
 
     def get_scene_list(
         self,
-        min_scene_len: Union[FrameTimecode, int] = 15,
+        min_scene_len: Union[FrameTimecode, int] = 0,
         merge_len: Optional[Union[FrameTimecode, int]] = 0,
         shift_scene_start: Union[FrameTimecode, int] = 0,
         shift_scene_end: Union[FrameTimecode, int] = 0,
@@ -560,7 +560,8 @@ class SceneManager(object):
                 this amount, the scene will be merged with the first predecessor less than
                 `merge_len` away, if one exists, otherwise the first successor less than `merge_len`
                 away. If no such scene can be found, or `merge_len` is None, the event is dropped.
-                This value applies before `shift_scene_start`/`shift_scene_end`.
+                Applied before `shift_scene_start`/`shift_scene_end`.
+                TODO(v1.0): Make default value 0.3s after FrameTimecode -> Timecode refactor.
             merge_len: Specifies the maximum distance an adjacent scene can be, in time, from scenes
                 smaller than `min_scene_len` before they are dropped instead of merged. The default
                 (0) only merges scenes shorter than `min_scene_len` if there is a scene directly
@@ -586,19 +587,25 @@ class SceneManager(object):
             List of tuples in the form `(start_time, end_time)`, where start_time is the first
             frame's presentation time stamp (PTS), and end_time is the last frame's PTS plus the
             duration of the frame itself.
-        """
 
+        Raises:
+            ValueError if min_scene_len/merge_len are out of range.
+        """
+        # Range check inputs before proceeding.
+        if min_scene_len < 0:
+            raise ValueError('min_scene_len is out of range! Value must be 0 or greater.')
+        if merge_len is not None and merge_len < 0:
+            raise ValueError('merge_len is out of range!')
+
+        # Return early if we have no work to do.
         if not self._events:
             return []
 
         assert self._start_pos is not None
         last_event_pos: FrameTimecode = self._start_pos
-        in_scene: bool = False
+        # If we only have CUT events, ensure the resulting scene list covers the whole video.
+        in_scene: bool = True if self._only_cuts else False
         scene_list: List[Tuple[FrameTimecode, FrameTimecode]] = []
-
-        # If we only have CUT events, ensure the resulting scene list covers the entire video.
-        if not (EventType.IN in self._event_types or EventType.OUT in self._event_types):
-           in_scene = True
 
         for timecode in sorted(self._events.keys()):
             # Prevent adding multiple scenes if there are two events on the same frame.
@@ -634,12 +641,36 @@ class SceneManager(object):
             # Include presentation time of the final frame.
             scene_list.append((last_event_pos, self._last_pos + 1))
 
-        # TODO(v1.0): Handle min_scene_len / drop_short_scenes.
-
+        # Handle min_scene_len / merge_len.
+        if merge_len is None:
+            # If merge_len is None, we drop all scenes shorter than min_scene_len.
+            scene_list = [
+                scene for scene in scene_list if (scene[1] - scene[0]) >= min_scene_len
+            ]
+        else:
+            # If any scenes are < min_scene_len, first try to merge it with a predecessor,
+            # otherwise a successor, that is at most merge_len away.
+            new_scene_list: List[Tuple[FrameTimecode, FrameTimecode]] = []
+            for i, scene in enumerate(scene_list):
+                # If the scene is long enough, add it and continue.
+                if (scene[1] - scene[0]) >= min_scene_len:
+                    new_scene_list.append(scene)
+                    continue
+                # Attempt to merge with the predecessor, which must be in new_scene_list already.
+                last_scene = new_scene_list[-1] if new_scene_list else None
+                next_scene = scene_list[i+1] if (i+1) < len(scene_list) else None
+                if last_scene and (scene[0] - last_scene[1]) <= merge_len:
+                    new_scene_list[-1] = (last_scene[0], scene[1])
+                # Attempt to merge with the next scene. We do this by modifying the next scene
+                # in-place before we process it.
+                elif next_scene and (next_scene[0] - scene[1]) <= merge_len:
+                    scene_list[i+1] = (scene[0], next_scene[1])
+                # If we get here, the scene will be dropped since it could not be merged.
+            scene_list = new_scene_list
         return scene_list
 
-
-    def get_cut_list(self, min_time_between_cuts: Union[FrameTimecode, int] = 15) -> List[FrameTimecode]:
+    def get_cut_list(self,
+                     min_time_between_cuts: Union[FrameTimecode, int] = 15) -> List[FrameTimecode]:
         """Returns a list of frames where EventType.CUT events were found.
 
         Arguments:
@@ -658,18 +689,15 @@ class SceneManager(object):
             cuts = filtered_cuts
         return cuts
 
-    def transform_events_to_cuts(self, fade_bias: Optional[float]=0.0) -> None:
+    def transform_events_to_cuts(self, fade_bias: Optional[float] = 0.0) -> None:
         """Transform all IN/OUT events to CUT events.
 
         Arguments:
-            fade_bias: If set, replaces the space between OUT and IN events with CUT events, where
-                fade_bias represents the relative location of the CUT between the two.
+            fade_bias: Value between -1.0 and +1.0 that indicates the relative position of where CUT
+                events should be placed between adjacent OUT and IN events, or None. If set to None,
+                transforms *all* event types to EventType.CUT. 0.0 (the default) is the midpoint of
+                the two events, -1.0 is closest to the OUT event, and +1.0 closest to the IN event.
 
-                If set to 0.0 (the default), a cut will be placed the middle of the two OUT/IN
-                events. Otherwise, must be between -1.0 and +1.0, with -1.0 closest to the OUT event
-                and +1.0 closest to the IN event.
-
-                If unset (i.e. None), transforms all event types to EventType.CUT.
 
                 As a visual reference, the following shows what cuts different fade_bias values
                 will produce if there is an OUT event on frame 2 and an IN event on frame 6:
@@ -705,7 +733,6 @@ class SceneManager(object):
         for key in [timecode for timecode in self._events if not self._events[timecode]]:
             del self._events[key]
 
-
     def _process_frame(self,
                        timecode: FrameTimecode,
                        frame_im: Optional[np.ndarray],
@@ -713,17 +740,18 @@ class SceneManager(object):
         """ Adds any cuts detected with the current frame to the cutting list. """
         for detector in self._detectors:
             events: Iterable[DetectionEvent] = detector.process_frame(timecode, frame_im)
-            self._add_events(events)
+            self.add_events(events)
             if events and callback:
                 # TODO(v1.0): Expand context passed to callback.
                 callback(frame_im, timecode.frame_num)
 
-    def _add_events(self, events: Iterable[DetectionEvent]) -> None:
+    def add_events(self, events: Iterable[DetectionEvent]) -> None:
         for event in events:
-            self._event_types.add(event.kind)
             if not event.time in self._events:
                 self._events[event.time] = []
             self._events[event.time] += [event]
+            if event.kind != EventType.CUT:
+                self._only_cuts = False
 
     def _is_processing_required(self, frame_num: int) -> bool:
         """ Is Processing Required: Returns True if frame metrics not in StatsManager,
@@ -736,14 +764,14 @@ class SceneManager(object):
         """ Adds any remaining cuts to the cutting list after processing the last frame. """
         for detector in self._detectors:
             events = detector.post_process(start_time=start_time, end_time=end_time)
-            self._add_events(events)
+            self.add_events(events)
 
     def detect_scenes(self,
                       video: VideoStream,
-                      duration: Union[FrameTimecode, int]=None,
-                      end_time: Union[FrameTimecode, int]=None,
-                      frame_skip: int=0,
-                      show_progress: bool=False,
+                      duration: Union[FrameTimecode, int] = None,
+                      end_time: Union[FrameTimecode, int] = None,
+                      frame_skip: int = 0,
+                      show_progress: bool = False,
                       callback: Callable[[np.ndarray, int], None] = None):
         """ Perform scene detection on the given video using the added SceneDetectors.
 
@@ -807,9 +835,9 @@ class SceneManager(object):
         else:
             downscale_factor = self.downscale
         if downscale_factor > 1:
-            logger.info(
-                'Downscale factor set to %d, effective resolution: %d x %d', downscale_factor,
-                video.frame_size[0]//downscale_factor, video.frame_size[1]//downscale_factor)
+            logger.info('Downscale factor set to %d, effective resolution: %d x %d',
+                        downscale_factor, video.frame_size[0] // downscale_factor,
+                        video.frame_size[1] // downscale_factor)
 
         progress_bar = None
         if tqdm and show_progress:
