@@ -607,6 +607,7 @@ class SceneManager(object):
         in_scene: bool = True if self._only_cuts else False
         scene_list: List[Tuple[FrameTimecode, FrameTimecode]] = []
 
+        # Process all events into discrete scenes based on IN/OUT and CUT events.
         for timecode in sorted(self._events.keys()):
             # Prevent adding multiple scenes if there are two events on the same frame.
             added_new_scene = False
@@ -641,6 +642,10 @@ class SceneManager(object):
             # Include presentation time of the final frame.
             scene_list.append((last_event_pos, self._last_pos + 1))
 
+        # Return early if we have no work to do.
+        if not scene_list:
+            return []
+
         # Handle min_scene_len / merge_len.
         if merge_len is None:
             # If merge_len is None, we drop all scenes shorter than min_scene_len.
@@ -667,6 +672,39 @@ class SceneManager(object):
                     scene_list[i+1] = (scene[0], next_scene[1])
                 # If we get here, the scene will be dropped since it could not be merged.
             scene_list = new_scene_list
+
+        # Handle shift_scene_start / shift_scene_end / overlap_bias.
+        if shift_scene_start != 0 or shift_scene_end != 0:
+            scene_list = [(start + shift_scene_start, end + shift_scene_end) for (start, end)
+                            in scene_list]
+            # Merge all scenes outside of the video boundaries.
+            for start_index in range(len(scene_list)):
+                if scene_list[start_index][0] > 0:
+                    break
+            for end_index in range(start_index, len(scene_list)):
+                if scene_list[end_index][1] > self._last_pos:
+                    scene_list[end_index] = (scene_list[end_index][0], self._last_pos + 1)
+                    break
+            scene_list = scene_list[start_index:end_index+1]
+
+            # Merge any scenes that overlap (assumes scene_list is sorted by scene start time).
+            new_scene_list = []
+            base_timecode = None if not scene_list else FrameTimecode(0, scene_list[0][0])
+            for i in range(len(scene_list) - 1):
+                if scene_list[i][1] > scene_list[i+1][0]:
+                    if overlap_bias is None:
+                        # Merge with next scene by modifying it's start time.
+                        scene_list[i+1] = (scene_list[i][0], scene_list[i+1][1])
+                    else:
+                        delta = scene_list[i][1].frame_num - scene_list[i+1][0].frame_num
+                        # Translate bias from -1.0-+1.0 to 0.0-1.0 before multiplying.
+                        overlap_bias_ratio = (overlap_bias + 1.0) / 2.0
+                        new_offset = scene_list[i+1][0].frame_num + round(delta * overlap_bias_ratio)
+                        new_timecode = base_timecode + new_offset
+                        scene_list[i] = (scene_list[i][0], new_timecode)
+                        scene_list[i+1] = (new_timecode, scene_list[i+1][1])
+                        new_scene_list.append(scene_list[i])
+            scene_list = new_scene_list + scene_list[-1:]
         return scene_list
 
     def get_cut_list(self,

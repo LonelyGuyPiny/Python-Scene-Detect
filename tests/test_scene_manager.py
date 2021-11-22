@@ -58,10 +58,12 @@ def _set_events(scene_manager: SceneManager, events: Iterable[Tuple[int, EventTy
     ])
 
 
-def _create_sm_from_events(events,
+def _create_sm_from_events(events: Iterable[Tuple[int, EventType]],
                            start_frame=0,
                            end_frame=0,
                            fps=10.0) -> Tuple[SceneManager, FrameTimecode]:
+    """Helper function that creates a SceneManager populated with the given events, where `events`
+    is a list of frame number and event type pairs. The FrameTimecodes are created with `fps`,"""
     sm = SceneManager()
     sm.add_detector(ContentDetector())
     bt = FrameTimecode(0, fps)
@@ -71,42 +73,54 @@ def _create_sm_from_events(events,
     return sm, bt
 
 
-@pytest.fixture
 def scene_with_gaps() -> Tuple[SceneManager, FrameTimecode]:
-    """Sets up a SceneManager with three scenes: (5, 20), (30, 40), and (60, 80), where each pair
-    are (IN, OUT) events."""
-    # Test case has three scenes: (5, 20), (30, 40), and (60, 80) with a length of 99
-    # and a framerate of 10.
+    """Start: 5, End: 99, Events: (5, IN), (20, OUT), (30, IN), (40, OUT), (60, IN), (80, OUT)"""
     IN, OUT = EventType.IN, EventType.OUT
     EVENTS = [(5, IN), (20, OUT), (30, IN), (40, OUT), (60, IN), (80, OUT)]
     return _create_sm_from_events(events=EVENTS, start_frame=5, end_frame=99)
 
-@pytest.fixture
+
 def scene_with_gaps_v2() -> Tuple[SceneManager, FrameTimecode]:
-    """Sets up a SceneManager with three scenes: (5, 20), (40, 50), and (60, 80), where each pair
-    are (IN, OUT) events."""
-    # Test case has three scenes: (5, 20), (40, 50), and (60, 80) with a length of 99
-    # and a framerate of 10.
+    """Start: 5, End: 99, Events: (5, IN), (20, OUT), (40, IN), (50, OUT), (60, IN), (80, OUT)"""
     # Same as scene_with_gaps but the middle scene is shifted more towards the last scene.
     IN, OUT = EventType.IN, EventType.OUT
     EVENTS = [(5, IN), (20, OUT), (40, IN), (50, OUT), (60, IN), (80, OUT)]
     return _create_sm_from_events(events=EVENTS, start_frame=5, end_frame=99)
 
-@pytest.fixture
+
 def scene_with_no_gaps() -> Tuple[SceneManager, FrameTimecode]:
-    """Sets up a SceneManager with two scenes: (10,20) and (20,40) where 10=IN, 20=CUT, and 40=OUT."""
+    """Start: 5, End: 59, Events: (10, IN), (20, CUT), (40, OUT)
+
+                   IN     CUT    OUT
+           START                       END
+Frame   0    5     10     20     40      59
+-----------------------------------------------
+
+    """
     # Test case has IN at frame 10 (t=1.0s), CUT at 20 (t=2.0s), OUT at 40 (t=4.0s), and has a
     # total of 59 frames (thus the video length is 6.0s).
     EVENTS = [(10, EventType.IN), (20, EventType.CUT), (40, EventType.OUT)]
     return _create_sm_from_events(events=EVENTS, start_frame=5, end_frame=59)
 
 
-@pytest.fixture
 def scene_with_no_gaps_cuts_only() -> Tuple[SceneManager, FrameTimecode]:
+    """Start: 5, End: 59, Events: (10, CUT), (20, CUT), (40, CUT)"""
     # Test case has CUT at frame 10 (t=1.0s), CUT at 20 (t=2.0s), CUT at 40 (t=4.0s), and has a
     # total of 59 frames (thus the video length is 6.0s and there are 4 scenes).
     EVENTS = [(10, EventType.CUT), (20, EventType.CUT), (40, EventType.CUT)]
     return _create_sm_from_events(events=EVENTS, start_frame=5, end_frame=59)
+
+
+def test_empty():
+
+    sm, _ = _create_sm_from_events(events=[], end_frame=59)
+
+    assert len(sm.get_cut_list()) == 0
+    assert len(sm.get_scene_list()) == 0
+
+    sm, _ = _create_sm_from_events(events=[(20, EventType.CUT), (40, EventType.OUT)], end_frame=59)
+    assert len(sm.get_cut_list()) == 1
+    assert len(sm.get_scene_list()) == 0
 
 
 def test_get_cut_list():
@@ -123,26 +137,24 @@ def test_get_cut_list():
     assert sm.get_cut_list(min_time_between_cuts=31) == [bt + 10]
 
 
-def test_scene_list_cuts_only(scene_with_no_gaps_cuts_only: Tuple[SceneManager, FrameTimecode]):
+def test_scene_list_cuts_only():
     """ Test get_scene_list with only CUT events. """
-    sm, bt = scene_with_no_gaps_cuts_only
+    sm, bt = scene_with_no_gaps_cuts_only()
     assert sm.get_scene_list() == [(bt + 5, bt + 10), (bt + 10, bt + 20), (bt + 20, bt + 40),
                                    (bt + 40, bt + 60)]
 
 
-def test_get_scene_list(scene_with_no_gaps: Tuple[SceneManager, FrameTimecode],
-                        scene_with_gaps: Tuple[SceneManager, FrameTimecode]):
+def test_get_scene_list():
     """Test basic functionality of `get_scene_list` with no/default transformations."""
-    sm, bt = scene_with_no_gaps
+    sm, bt = scene_with_no_gaps()
     assert sm.get_scene_list() == [(bt + 10, bt + 20), (bt + 20, bt + 40)]
-    sm, bt = scene_with_gaps
+    sm, bt = scene_with_gaps()
     assert sm.get_scene_list() == [(bt + 5, bt + 20), (bt + 30, bt + 40), (bt + 60, bt + 80)]
 
 
-def test_get_scene_list_always_include_end(scene_with_no_gaps: Tuple[SceneManager, FrameTimecode],
-                                           scene_with_gaps: Tuple[SceneManager, FrameTimecode]):
+def test_get_scene_list_always_include_end():
     """Test the `always_include_end` option in `get_scene_list`."""
-    sm, bt = scene_with_no_gaps
+    sm, bt = scene_with_no_gaps()
     assert sm.get_scene_list(always_include_end=True) == [(bt + 10, bt + 20), (bt + 20, bt + 40),
                                                           (bt + 40, bt + 60)]
     # Ensure a CUT outside of the last OUT event does not trigger a new scene.
@@ -154,14 +166,14 @@ def test_get_scene_list_always_include_end(scene_with_no_gaps: Tuple[SceneManage
     assert sm.get_scene_list(always_include_end=True) == [(bt + 10, bt + 20), (bt + 20, bt + 40),
                                                           (bt + 40, bt + 60)]
     # Lastly, check that the result is consistent with another set.
-    sm, bt = scene_with_gaps
+    sm, bt = scene_with_gaps()
     assert sm.get_scene_list(always_include_end=True) == [(bt + 5, bt + 20), (bt + 30, bt + 40),
                                                           (bt + 60, bt + 80), (bt + 80, bt + 100)]
 
 
-def test_get_scene_list_min_scene_len(scene_with_no_gaps: Tuple[SceneManager, FrameTimecode]):
+def test_get_scene_list_min_scene_len():
     """Test the `min_scene_len` option in `get_scene_list`."""
-    sm, bt = scene_with_no_gaps
+    sm, bt = scene_with_no_gaps()
     assert sm.get_scene_list(min_scene_len=10) == [(bt + 10, bt + 20), (bt + 20, bt + 40)]
 
     assert sm.get_scene_list(min_scene_len=10) == [(bt + 10, bt + 20), (bt + 20, bt + 40)]
@@ -169,35 +181,83 @@ def test_get_scene_list_min_scene_len(scene_with_no_gaps: Tuple[SceneManager, Fr
     assert sm.get_scene_list(min_scene_len=20) == [(bt + 10, bt + 40)]
 
 
-def test_get_scene_list_merge_len(scene_with_no_gaps: Tuple[SceneManager, FrameTimecode],
-                                  scene_with_gaps: Tuple[SceneManager, FrameTimecode],
-                                  scene_with_gaps_v2: Tuple[SceneManager, FrameTimecode]):
+def test_get_scene_list_merge_len():
     """Test the `merge_len` option in `get_scene_list`."""
-    sm, bt = scene_with_no_gaps
+    sm, bt = scene_with_no_gaps()
     # If merge_len is None, we should drop all scenes shorter than min_scene_len.
     assert sm.get_scene_list(min_scene_len=20, merge_len=None) == [(bt + 20, bt + 40)]
     # If merge_len is >= 0, then they should be merged instead since they are directly adjacent.
     assert sm.get_scene_list(min_scene_len=20, merge_len=0) == [(bt + 10, bt + 40)]
     assert sm.get_scene_list(min_scene_len=20, merge_len=200) == [(bt + 10, bt + 40)]
 
-    sm, bt = scene_with_gaps
+    sm, bt = scene_with_gaps()
     # Increase merge_len until the first two scenes get merged.
     assert sm.get_scene_list(min_scene_len=20, merge_len=None) == [(bt + 60, bt + 80)]
     assert sm.get_scene_list(min_scene_len=20, merge_len=9) == [(bt + 60, bt + 80)]
     assert sm.get_scene_list(
         min_scene_len=20, merge_len=10) == [(bt + 5, bt + 40), (bt + 60, bt + 80)]
     # Test that all get merged properly once min_scene_len is increased.
-    assert sm.get_scene_list(
-        min_scene_len=30, merge_len=20) == [(bt + 5, bt + 80)]
+    assert sm.get_scene_list(min_scene_len=30, merge_len=20) == [(bt + 5, bt + 80)]
     # Test that the predecessor is preferred over the successor for merging.
     assert sm.get_scene_list(
         min_scene_len=15, merge_len=20) == [(bt + 5, bt + 40), (bt + 60, bt + 80)]
 
     # Test that the successor can still be merged to if it is the only candidate.
-    sm, bt = scene_with_gaps_v2
+    sm, bt = scene_with_gaps_v2()
     assert sm.get_scene_list(
         min_scene_len=15, merge_len=10) == [(bt + 5, bt + 20), (bt + 40, bt + 80)]
 
+
+def test_get_scene_list_shift_start_offset():
+    """Test the `shift_scene_start`/`shift_scene_end`/`overlap_bias` options in `get_scene_list`."""
+
+    sm, bt = scene_with_no_gaps()
+    # Test shift_scene_start with overlap_bias=None (i.e. merge), which is the default
+    assert sm.get_scene_list(shift_scene_start=-5) == [(bt + 5, bt + 40)]
+    assert sm.get_scene_list(shift_scene_start=-5, overlap_bias=None) == [(bt + 5, bt + 40)]
+    assert sm.get_scene_list(
+        always_include_end=True, shift_scene_start=-5, overlap_bias=None) == [(bt + 5, bt + 60)]
+    # Test shift_scene_start with overlap_bias=0.0
+    assert sm.get_scene_list(
+        shift_scene_start=-5, overlap_bias=0.0) == [(bt + 5, bt + 17), (bt + 17, bt + 40)]
+    assert sm.get_scene_list(
+        always_include_end=True, shift_scene_start=-5, overlap_bias=0.0) == [(bt + 5, bt + 17),
+                                                                             (bt + 17, bt + 37),
+                                                                             (bt + 37, bt + 60)]
+    # Test shift_scene_start with overlap_bias=1.0
+    assert sm.get_scene_list(
+        shift_scene_start=-5, overlap_bias=1.0) == [(bt + 5, bt + 20), (bt + 20, bt + 40)]
+    assert sm.get_scene_list(
+        always_include_end=True, shift_scene_start=-5, overlap_bias=1.0) == [(bt + 5, bt + 20),
+                                                                             (bt + 20, bt + 40),
+                                                                             (bt + 40, bt + 60)]
+    # Test shift_scene_start with overlap_bias=-1.0
+    assert sm.get_scene_list(
+        shift_scene_start=-5, overlap_bias=-1.0) == [(bt + 5, bt + 15), (bt + 15, bt + 40)]
+    assert sm.get_scene_list(
+        always_include_end=True, shift_scene_start=-5, overlap_bias=-1.0) == [(bt + 5, bt + 15),
+                                                                              (bt + 15, bt + 35),
+                                                                              (bt + 35, bt + 60)]
+
+    # Test shifting more than the entire first two scenes behind time 0
+    assert sm.get_scene_list(shift_scene_start=-25, overlap_bias=None) == [(bt, bt + 40)]
+    assert sm.get_scene_list(
+        shift_scene_start=-45, overlap_bias=None, always_include_end=True) == [(bt, bt + 60)]
+    assert sm.get_scene_list(shift_scene_start=-25, overlap_bias=0.0) == [(bt, bt + 40)]
+    assert sm.get_scene_list(shift_scene_start=-25, overlap_bias=1.0) == [(bt, bt + 40)]
+    assert sm.get_scene_list(shift_scene_start=-25, overlap_bias=-1.0) == [(bt, bt + 40)]
+
+    # Test shifting more than the entire last two scenes beyond the end of the video
+    assert sm.get_scene_list(shift_scene_end=45, overlap_bias=None) == [(bt + 10, bt + 60)]
+    assert sm.get_scene_list(shift_scene_end=45, overlap_bias=0.0) == [(bt + 10, bt + 60)]
+    assert sm.get_scene_list(shift_scene_end=45, overlap_bias=1.0) == [(bt + 10, bt + 60)]
+    assert sm.get_scene_list(shift_scene_end=45, overlap_bias=-1.0) == [(bt + 10, bt + 60)]
+
+
+
+    # Basic test using a video containing gaps instead of a contiguous segment.
+    sm, bt = scene_with_gaps()
+    # TODO(v1.0)
 
 
 def test_save_images(test_video_file):
