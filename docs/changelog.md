@@ -64,7 +64,7 @@ In terms of the Python API, developers should expect the new interface to be muc
 
  * Scene detection algorithms can now provide additional context during a detection event (e.g. confidence)
  * Common non-trivial event processing options have been moved from existing detectors to the `SceneManager`:
-    * `SceneManager.get_scene_list()` now handles minimum scene length (previously was done in each detector), merge/drop behaviour (previously only exposed via CLI), and shifting of events in time (new)
+    * `SceneManager.get_scene_list()` now returns a `SceneList` object which can be used to perform various transformations/post-processing filters (e.g. handling minimum scene length, merge/drop behaviour, shifting of scene boundaries in time). This object extends the native Python list object and can chain several operations together (TODO(v1.0): link to example).
     * `SceneManager.get_cut_list()` allows specifying the minimum time between events (previously done in each detector)
     * `SceneManager.transform_events_to_cuts()` handles converting out/in events into cuts (previously this was done in `ThresholdDetector`)
  * New `VideoStream` object replaces `VideoManager` and supports both OpenCV and PyAV backends

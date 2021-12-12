@@ -4,7 +4,7 @@
 
 
 #######################################################################
-PySceneDetect v1.0 Manual
+PySceneDetect Manual
 #######################################################################
 
 .. warning::
@@ -58,6 +58,7 @@ Table of Contents
     api/video_stream
     api/backends
     api/scene_manager
+    api/scene_list
     api/stats_manager
     api/scene_detector
     api/detectors

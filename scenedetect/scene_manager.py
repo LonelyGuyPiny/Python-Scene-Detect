@@ -244,7 +244,10 @@ def write_scene_list_html(output_html_filename,
     page.css = css
     page.save(output_html_filename)
 
-
+#
+# TODO(v1.0): Refactor to take a SceneList object; consider moving this and save scene list
+# to a better spot, or just move them to scene_list.py.
+#
 def save_images(scene_list: List[Tuple[FrameTimecode, FrameTimecode]],
                 video: VideoStream,
                 num_images: int = 3,
@@ -539,12 +542,7 @@ class SceneManager(object):
 
     def get_scene_list(
         self,
-        min_scene_len: Union[FrameTimecode, int] = 0,
-        merge_len: Optional[Union[FrameTimecode, int]] = 0,
-        shift_scene_start: Union[FrameTimecode, int] = 0,
-        shift_scene_end: Union[FrameTimecode, int] = 0,
-        overlap_bias: Optional[float] = None,
-        always_include_end: bool = False,
+        always_include_end: bool = True,
     ) -> List[Tuple[FrameTimecode, FrameTimecode]]:
         """Returns a list of tuples of start/end `FrameTimecodes` for each detected scene.
         If multiple events are found on the same frame, only last event (i.e. most recent in the
@@ -556,32 +554,8 @@ class SceneManager(object):
         no events at all (i.e. self.events is empty), an empty list is returned.
 
         Arguments:
-            min_scene_len: Minimum length each scene must be. If a given scene is smaller than
-                this amount, the scene will be merged with the first predecessor less than
-                `merge_len` away, if one exists, otherwise the first successor less than `merge_len`
-                away. If no such scene can be found, or `merge_len` is None, the event is dropped.
-                Applied before `shift_scene_start`/`shift_scene_end`.
-                TODO(v1.0): Make default value 0.3s after FrameTimecode -> Timecode refactor.
-            merge_len: Specifies the maximum distance an adjacent scene can be, in time, from scenes
-                smaller than `min_scene_len` before they are dropped instead of merged. The default
-                (0) only merges scenes shorter than `min_scene_len` if there is a scene directly
-                adjacent to it. If set to None, scenes will be dropped instead of merged.
-            shift_scene_start: Amount to add to each scene's start timecode. Negative values
-                imply shifting the start time backwards (e.g. making each scene longer).
-                If the shifted time overlaps with another scene, they will be merged unless
-                overlap_bias is set.
-                TODO(v1.0): Allow negative FrameTimecode values in addition to frame numbers.
-                Do as part of the FrameTimecode refactor; for now just test using frame numbers,
-                and don't expose any CLI options for this under the `post-process` command yet.
-            shift_scene_end: Amount to add to each scene's end timecode. Negative values
-                imply shifting the end time backwards (e.g. making each scene shorter).
-                Overlapping scenes will be merged unless overlap_bias is set.
-            overlap_bias: If set, specifies how the resulting scene start/end times should be
-                shifted in the case that the specified shift amount causes an overlap. If not
-                set (i.e. is None), any overlapping scenes will be merged together.
-                Valid values are between -1.0 and +1.0, with -1.0 prioritizing shift_scene_start
-                and +1.0 prioritizing shift_scene_end. A value of 0.0 will set the transition
-                directly between the midpoint of the resulting overlap.
+            always_include_end: If True (default) include the end of the video if the last event was
+                not an OUT event. If False the last scene will always end on the last event.
 
         Returns:
             List of tuples in the form `(start_time, end_time)`, where start_time is the first
@@ -591,11 +565,6 @@ class SceneManager(object):
         Raises:
             ValueError if min_scene_len/merge_len are out of range.
         """
-        # Range check inputs before proceeding.
-        if min_scene_len < 0:
-            raise ValueError('min_scene_len is out of range! Value must be 0 or greater.')
-        if merge_len is not None and merge_len < 0:
-            raise ValueError('merge_len is out of range!')
 
         # Return early if we have no work to do.
         if not self._events:
@@ -638,91 +607,28 @@ class SceneManager(object):
                         last_event_pos = timecode
 
         # If we ended after an EventType.IN, make sure we end the scene on the last frame.
-        if in_scene or always_include_end:
+        if in_scene and always_include_end:
             # Include presentation time of the final frame.
             scene_list.append((last_event_pos, self._last_pos + 1))
 
-        # Return early if we have no work to do.
-        if not scene_list:
-            return []
-
-        # Handle min_scene_len / merge_len.
-        if merge_len is None:
-            # If merge_len is None, we drop all scenes shorter than min_scene_len.
-            scene_list = [
-                scene for scene in scene_list if (scene[1] - scene[0]) >= min_scene_len
-            ]
-        else:
-            # If any scenes are < min_scene_len, first try to merge it with a predecessor,
-            # otherwise a successor, that is at most merge_len away.
-            new_scene_list: List[Tuple[FrameTimecode, FrameTimecode]] = []
-            for i, scene in enumerate(scene_list):
-                # If the scene is long enough, add it and continue.
-                if (scene[1] - scene[0]) >= min_scene_len:
-                    new_scene_list.append(scene)
-                    continue
-                # Attempt to merge with the predecessor, which must be in new_scene_list already.
-                last_scene = new_scene_list[-1] if new_scene_list else None
-                next_scene = scene_list[i+1] if (i+1) < len(scene_list) else None
-                if last_scene and (scene[0] - last_scene[1]) <= merge_len:
-                    new_scene_list[-1] = (last_scene[0], scene[1])
-                # Attempt to merge with the next scene. We do this by modifying the next scene
-                # in-place before we process it.
-                elif next_scene and (next_scene[0] - scene[1]) <= merge_len:
-                    scene_list[i+1] = (scene[0], next_scene[1])
-                # If we get here, the scene will be dropped since it could not be merged.
-            scene_list = new_scene_list
-
-        # Handle shift_scene_start / shift_scene_end / overlap_bias.
-        if shift_scene_start != 0 or shift_scene_end != 0:
-            scene_list = [(start + shift_scene_start, end + shift_scene_end) for (start, end)
-                            in scene_list]
-            # Merge all scenes outside of the video boundaries.
-            for start_index in range(len(scene_list)):
-                if scene_list[start_index][0] > 0:
-                    break
-            for end_index in range(start_index, len(scene_list)):
-                if scene_list[end_index][1] > self._last_pos:
-                    scene_list[end_index] = (scene_list[end_index][0], self._last_pos + 1)
-                    break
-            scene_list = scene_list[start_index:end_index+1]
-
-            # Merge any scenes that overlap (assumes scene_list is sorted by scene start time).
-            new_scene_list = []
-            base_timecode = None if not scene_list else FrameTimecode(0, scene_list[0][0])
-            for i in range(len(scene_list) - 1):
-                if scene_list[i][1] > scene_list[i+1][0]:
-                    if overlap_bias is None:
-                        # Merge with next scene by modifying it's start time.
-                        scene_list[i+1] = (scene_list[i][0], scene_list[i+1][1])
-                    else:
-                        delta = scene_list[i][1].frame_num - scene_list[i+1][0].frame_num
-                        # Translate bias from -1.0-+1.0 to 0.0-1.0 before multiplying.
-                        overlap_bias_ratio = (overlap_bias + 1.0) / 2.0
-                        new_offset = scene_list[i+1][0].frame_num + round(delta * overlap_bias_ratio)
-                        new_timecode = base_timecode + new_offset
-                        scene_list[i] = (scene_list[i][0], new_timecode)
-                        scene_list[i+1] = (new_timecode, scene_list[i+1][1])
-                        new_scene_list.append(scene_list[i])
-            scene_list = new_scene_list + scene_list[-1:]
         return scene_list
 
     def get_cut_list(self,
-                     min_time_between_cuts: Union[FrameTimecode, int] = 15) -> List[FrameTimecode]:
+                     minimum_spacing: Union[FrameTimecode, int] = 15) -> List[FrameTimecode]:
         """Returns a list of frames where EventType.CUT events were found.
 
         Arguments:
-            min_time_between_cuts: Ignores any cuts between the current cut and plus
-                `min_time_between_cuts`. Values <= 1 have no effect.
+            minimum_spacing: Minimum amount of time between cuts. After a cut is detected, any
+                subsequent cuts that occur within this time are ignored. Values < 1 have no effect.
         """
         cuts = [
             event_time for event_time in sorted(self._events)
             if any(event.kind == EventType.CUT for event in self._events[event_time])
         ]
-        if min_time_between_cuts > 1 and len(cuts) > 1:
+        if minimum_spacing > 1 and len(cuts) > 1:
             filtered_cuts = cuts[0:1]
             for i in range(1, len(cuts)):
-                if cuts[i] - filtered_cuts[-1] >= min_time_between_cuts:
+                if cuts[i] - filtered_cuts[-1] >= minimum_spacing:
                     filtered_cuts.append(cuts[i])
             cuts = filtered_cuts
         return cuts
@@ -738,21 +644,24 @@ class SceneManager(object):
 
 
                 As a visual reference, the following shows what cuts different fade_bias values
-                will produce if there is an OUT event on frame 2 and an IN event on frame 6:
+                will produce if there is an OUT event on frame 2 and an IN event on frame 8:
 
-                ------------------------------------------------------------------------
-                    Frame:     1       2      3       4       5       6       7       8
-                    Event:            OUT                            IN
-                ------------------------------------------------------------------------
-                    None             CUT                            CUT
-                    -1.0             CUT
-                    +1.0                                            CUT
-                    0.0                            CUT
-                ------------------------------------------------------------------------
+                --------------------------------------------------------------
+                    Frame:  1    2     3    4    5    6    7    8    9    10
+                    Event:      OUT              |             IN
+                -----------------|---------------|--------------|-------------
+                    None        CUT              |             CUT
+                -----------------|---------------|--------------|-------------
+                    -1.0        CUT              |              |
+                ---------------------------------|--------------|-------------
+                    +1.0                         |             CUT
+                ---------------------------------|----------------------------
+                    0.0                         CUT
+                --------------------------------------------------------------
 
-                Thus in this scenario, a fade_bias of None will produce cuts at frames 2 and 6,
-                -1.0 produces a cut at 2, +1.0 produces a cut at 6, and 0.0 produces a cut directly
-                in the middle of the OUT/IN event pair at frame 4.
+                Thus in this scenario, a fade_bias of None will produce cuts at frames 2 and 8,
+                -1.0 produces a cut at 2, +1.0 produces a cut at 8, and 0.0 produces a cut directly
+                in the middle of the OUT/IN event pair at frame 5 (=(2+8)/2).
         """
 
         # If fade_bias is None, then we simply replace the type of each event with EventType.CUT.

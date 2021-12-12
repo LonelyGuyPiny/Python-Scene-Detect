@@ -33,6 +33,11 @@ main classes/modules provided in the `scenedetect` package:
       class for applying `SceneDetector` objects on a `VideoManager`,
       and optionally using a `StatsManager` as a cache.
 
+    * :ref:`scenedetect.scene_list 🛠️ <scenedetect-scene_list>`: Contains
+      :py:class:`SceneList <scenedetect.scene_list.SceneList>`
+      class which contains the `SceneList` class used to apply transformations to the scenes
+      obtained from a `SceneManager` (e.g. merging short scenes with their neighbors).
+
     * :ref:`scenedetect.stats_manager 🧮 <scenedetect-stats_manager>`: Contains
       :py:class:`StatsManager <scenedetect.stats_manager.StatsManager>`
       class for caching frame metrics and loading/saving them to disk in

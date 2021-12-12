@@ -462,6 +462,7 @@ class FrameTimecode(object):
             raise TypeError('Unsupported type for performing >= with FrameTimecode.')
 
 
+    # TODO: __int__ and __float__ should be removed.
 
     def __int__(self):
         return self.frame_num
@@ -473,7 +474,7 @@ class FrameTimecode(object):
         return self.get_timecode()
 
     def __repr__(self):
-        return 'FrameTimecode(frame=%d, fps=%f)' % (self.frame_num, self.framerate)
+        return '%s [frame=%d, fps=%.3f]' % (self.get_timecode(), self.frame_num, self.framerate)
 
     def __hash__(self):
         return self.frame_num
