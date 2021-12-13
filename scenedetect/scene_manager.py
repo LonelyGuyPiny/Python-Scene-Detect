@@ -707,10 +707,10 @@ class SceneManager(object):
             return True
         return all([detector.is_processing_required(frame_num) for detector in self._detectors])
 
-    def _post_process(self, start_time: FrameTimecode, end_time: FrameTimecode):
+    def _post_process(self):
         """ Adds any remaining cuts to the cutting list after processing the last frame. """
         for detector in self._detectors:
-            events = detector.post_process(start_time=start_time, end_time=end_time)
+            events = detector.post_process()
             self.add_events(events)
 
     def detect_scenes(self,
@@ -824,7 +824,7 @@ class SceneManager(object):
                     break
             if self._start_pos is None:
                 self._start_pos = video.position
-            self._post_process(start_time=self._start_pos, end_time=video.position)
+            self._post_process()
 
         finally:
 

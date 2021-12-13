@@ -94,7 +94,7 @@ class MotionDetector(SparseSceneDetector):
         """
         return []
 
-    def post_process(self, frame_num):
+    def post_process(self):
         """Writes the last scene if the video ends while in a motion event.
         """
 

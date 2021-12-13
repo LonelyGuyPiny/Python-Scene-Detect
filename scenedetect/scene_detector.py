@@ -139,8 +139,7 @@ class SceneDetector(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def post_process(self, start_time: FrameTimecode,
-                     end_time: FrameTimecode) -> List[DetectionEvent]:
+    def post_process(self) -> List[DetectionEvent]:
         """Performs any processing after the last frame has been read.
 
         Returns:

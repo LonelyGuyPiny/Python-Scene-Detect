@@ -141,6 +141,5 @@ class ThresholdDetector(SceneDetector):
 
         return []  # No previous frames to compare against yet.
 
-    def post_process(self, start_time: FrameTimecode,
-                     end_time: FrameTimecode) -> List[DetectionEvent]:
+    def post_process(self) -> List[DetectionEvent]:
         return []

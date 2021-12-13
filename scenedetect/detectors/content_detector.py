@@ -171,12 +171,5 @@ class ContentDetector(SceneDetector):
 
         return cut_list
 
-    def post_process(self, start_time: FrameTimecode,
-                     end_time: FrameTimecode) -> List[DetectionEvent]:
-        """Performs any processing after the last frame has been read.
-
-        TODO: Based on the parameters passed to the ContentDetector constructor,
-            ensure that the last scene meets the minimum length requirement,
-            otherwise it should be merged with the previous scene.
-        """
+    def post_process(self) -> List[DetectionEvent]:
         return []

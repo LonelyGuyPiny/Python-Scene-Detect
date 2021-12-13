@@ -69,6 +69,9 @@ class AdaptiveDetector(ContentDetector):
         self._adaptive_ratio_key = AdaptiveDetector.ADAPTIVE_RATIO_KEY_TEMPLATE.format(
             window_width=window_width, luma_only='' if not luma_only else '_lum')
 
+        self._start_time = None
+        self._end_time = None
+
     @staticmethod
     def stats_manager_required() -> bool:
         # type: () -> bool
@@ -106,6 +109,10 @@ class AdaptiveDetector(ContentDetector):
         if self.is_processing_required(timecode):
             super().process_frame(timecode, frame_img)
 
+        if self._start_time is None:
+            self._start_time = timecode
+        self._end_time = timecode
+
         return []
 
     def get_content_val(self, frame_num: int):
@@ -116,8 +123,7 @@ class AdaptiveDetector(ContentDetector):
             ContentDetector.FRAME_SCORE_KEY if not self._luma_only else ContentDetector.DELTA_V_KEY)
         return self.stats_manager.get_metrics(frame_num, [metric_key])[0]
 
-    def post_process(self, start_time: FrameTimecode,
-                     end_time: FrameTimecode) -> List[DetectionEvent]:
+    def post_process(self) -> List[DetectionEvent]:
         """
         After an initial run through the video to detect content change
         between each frame, we try to identify fast cuts as short peaks in the
@@ -127,13 +133,17 @@ class AdaptiveDetector(ContentDetector):
         could be fast camera movement or a change in lighting that lasts for
         more than a single frame.
         """
+        if self._start_time is None:
+            return []
+
         cut_list = []
         adaptive_threshold = self.adaptive_threshold
         window_width = self.window_width
         last_cut = None
-        start_frame = start_time.frame_num
-        end_frame = end_time.frame_num
-        base_timecode = FrameTimecode(0, start_time)
+        start_frame = self._start_time.frame_num
+        end_frame = self._end_time.frame_num
+        base_timecode = FrameTimecode(0, self._start_time)
+
 
         assert self.stats_manager is not None
 
