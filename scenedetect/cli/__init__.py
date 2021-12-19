@@ -181,7 +181,7 @@ def duplicate_command(ctx, param_hint):
 @click.option(
     '--min-scene-len', '-m', metavar='TIMECODE',
     type=click.STRING, default='0.6s', show_default=True, help=
-    'Minimum size/length of any scene. TIMECODE can be specified as exact'
+    'Minimum length of any scene. TIMECODE can be specified as exact'
     ' number of frames, a time in seconds followed by s, or a timecode in the'
     ' format HH:MM:SS or HH:MM:SS.nnn')
 @click.option(
