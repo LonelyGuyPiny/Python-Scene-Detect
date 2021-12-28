@@ -343,7 +343,7 @@ class FrameTimecode(object):
         elif isinstance(other, float):
             self.frame_num -= self._seconds_to_frames(other)
         else:
-            raise TypeError('Unsupported type for performing subtraction with FrameTimecode.')
+            raise TypeError('Unsupported type for performing subtraction with FrameTimecode: %s' % type(other))
         if self.frame_num < 0:
             self.frame_num = 0
         return self
@@ -373,7 +373,7 @@ class FrameTimecode(object):
         elif other is None:
             return False
         else:
-            raise TypeError('Unsupported type for performing == with FrameTimecode.')
+            raise TypeError('Unsupported type for performing == with FrameTimecode: %s' % type(other))
 
 
     def __ne__(self, other):
@@ -398,7 +398,7 @@ class FrameTimecode(object):
         #elif other is None:
         #    return False
         else:
-            raise TypeError('Unsupported type for performing < with FrameTimecode.')
+            raise TypeError('Unsupported type for performing < with FrameTimecode: %s' % type(other))
 
 
     def __le__(self, other):
@@ -418,7 +418,7 @@ class FrameTimecode(object):
         #elif other is None:
         #    return False
         else:
-            raise TypeError('Unsupported type for performing <= with FrameTimecode.')
+            raise TypeError('Unsupported type for performing <= with FrameTimecode: %s' % type(other))
 
 
     def __gt__(self, other):
@@ -438,8 +438,8 @@ class FrameTimecode(object):
         #elif other is None:
         #    return False
         else:
-            raise TypeError('Unsupported type (%s) for performing > with FrameTimecode.' %
-                            type(other).__name__)
+            raise TypeError('Unsupported type for performing > with FrameTimecode: %s' %
+                            type(other))
 
 
     def __ge__(self, other):
@@ -459,7 +459,7 @@ class FrameTimecode(object):
         #elif other is None:
         #    return False
         else:
-            raise TypeError('Unsupported type for performing >= with FrameTimecode.')
+            raise TypeError('Unsupported type for performing >= with FrameTimecode: %s' % type(other))
 
 
     # TODO: __int__ and __float__ should be removed.
