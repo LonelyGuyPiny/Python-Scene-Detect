@@ -23,14 +23,11 @@
 # ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-"""PySceneDetect scenedetect.scene_list SceneList Tests"""
+"""PySceneDetect scenedetect.scene_list Tests
 
-# Standard project pylint disables for unit tests using pytest.
-# pylint: disable=protected-access, invalid-name, unused-argument, redefined-outer-name
+This file includes unit tests for the SceneList object which applies a set of transformations to
+Scene objects, which are essentially pairs of FrameTimecodes representing a scene's start/end."""
 
-import glob
-import os
-import os.path
 from typing import Iterable, Tuple
 
 import pytest
@@ -38,11 +35,13 @@ import pytest
 from scenedetect.frame_timecode import FrameTimecode
 from scenedetect.scene_list import SceneList
 
-BASE_TIME = FrameTimecode(timecode=0, fps=10.0)
 
 def make_scene_list(scenes: Iterable[Tuple[int, int]]) -> SceneList:
-    return SceneList(
-        scenes=[(BASE_TIME + start, BASE_TIME + end) for start, end in scenes])
+    """Create a SceneList from a list of pairs of ints representing frame numbers.
+    The framerate is set at 10 FPS to make timecode calculations easier."""
+    base_time = FrameTimecode(timecode=0, fps=10.0)
+    return SceneList(scenes=[(base_time + start, base_time + end) for start, end in scenes])
+
 
 def test_drop():
     """Test `drop`"""
@@ -65,6 +64,7 @@ def test_drop():
     assert scenes.drop(min_len=21) == [(20, 40)]
     assert scenes.drop(min_len=22) == []
 
+
 def test_merge():
     """Test `merge`."""
     scenes = make_scene_list(scenes=[(10, 20), (30, 40), (40, 60)])
@@ -81,9 +81,38 @@ def test_merge():
     assert scenes.merge(min_len=21, max_dist=9) == [(10, 20), (30, 60)]
     assert scenes.merge(min_len=21, max_dist=10) == [(10, 60)]
 
+
 def test_contract():
     """Test `contract`"""
     scenes = make_scene_list(scenes=[(10, 40), (40, 50), (50, 60)])
     assert scenes.contract(start=5) == [(15, 40), (45, 50), (55, 60)]
     assert scenes.contract(end=5) == [(10, 35), (40, 45), (50, 55)]
     assert scenes.contract(start=5, end=5) == [(15, 35)]
+    assert scenes.contract(start=10, end=10) == [(20, 30)]
+
+
+@pytest.mark.skip(reason="TODO(v1.0): Finish SceneList expand().")
+def test_expand_merge():
+    """Test `expand` with merge=True (default)."""
+    scenes = make_scene_list(scenes=[(10, 20), (30, 40), (40, 60)])
+    assert scenes.expand(start=5) == [(5, 20), (25, 60)]
+    assert scenes.expand(end=5) == [(10, 25), (30, 65)]
+    assert scenes.expand(start=5, end=5) == [(5, 25), (25, 65)]
+    # Note that these values now result in some overlap which was still not merged.
+    assert scenes.expand(start=10, end=10) == [(0, 30), (20, 70)]
+    # Once the expanded regions cover the original boundaries, they should be merged.
+    # As the SceneList doesn't know the original video's start/end times, they may be
+    # extended past the original video boundaries.
+    assert scenes.expand(start=10, end=11) == [(0, 71)]
+    assert scenes.expand(start=11, end=10) == [(0, 70)]
+    assert scenes.expand(start=11, end=11) == [(0, 71)]
+
+
+@pytest.mark.skip(reason="TODO(v1.0): Finish SceneList expand().")
+def test_expand_no_merge():
+    """Test `expand` with merge=False."""
+    scenes = make_scene_list(scenes=[(10, 20), (30, 40), (40, 60)])
+    assert scenes.expand(start=5, merge=False) == [(5, 20), (25, 40), (35, 60)]
+    assert scenes.expand(end=5, merge=False) == [(10, 25), (30, 45), (40, 65)]
+    assert scenes.expand(start=5, end=10, merge=False) == [(5, 30), (25, 50), (35, 70)]
+    assert scenes.expand(start=15, end=10, merge=False) == [(0, 30), (15, 50), (25, 70)]
